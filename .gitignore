@@ -1,0 +1,226 @@
+# Dependencies (works recursively in all nested folders)
+node_modules/
+**/node_modules/
+.pnp
+.pnp.js
+.pnp.*
+.yarn/
+**/.yarn/
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# Testing
+coverage/
+*.lcov
+.nyc_output
+*.test.js.snap
+.jest/
+
+# Production builds (works recursively in all nested folders)
+dist/
+**/dist/
+build/
+**/build/
+.next/
+**/.next/
+out/
+**/out/
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# Environment variables (works recursively in all nested folders)
+.env
+**/.env
+.env.local
+**/.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+**/.env.*.local
+*.env
+**/*.env
+!.env.example
+!**/.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Debug
+.vscode/launch.json
+.vscode/tasks.json
+*.pdb
+
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# IDE - JetBrains
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# IDE - Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# IDE - Vim
+*.swp
+*.swo
+*~
+.vim/
+
+# IDE - Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# OS - macOS (works recursively in all nested folders)
+.DS_Store
+**/.DS_Store
+.AppleDouble
+**/.AppleDouble
+.LSOverride
+Icon
+._*
+**/._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# OS - Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# OS - Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Turbo (works recursively in all nested folders)
+.turbo/
+**/.turbo/
+.turbo-cache/
+**/.turbo-cache/
+
+# Vercel (works recursively in all nested folders)
+.vercel/
+**/.vercel/
+.vercelignore
+
+# Netlify (works recursively in all nested folders)
+.netlify/
+**/.netlify/
+.netlify.toml.local
+
+# Vite (works recursively in all nested folders)
+.vite/
+**/.vite/
+vite.config.*.timestamp-*
+vite.config.*.temp
+
+# TypeScript
+*.tsbuildinfo
+.tsbuildinfo
+
+# ESLint
+.eslintcache
+
+# Prettier
+.prettierignore.local
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+
+# Package manager
+package-lock.json.backup
+yarn.lock.backup
+pnpm-lock.yaml.backup
+
+# Local development
+.local/
+local/
+*.local
+
+# Build artifacts
+*.map
+*.min.js
+*.min.css
+
+# Misc
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Supabase local development (if using Supabase CLI)
+.supabase/
+
+# AI/ML models (if any)
+*.model
+*.pkl
+*.h5
+*.onnx
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets and keys
+*.pem
+*.key
+*.cert
+secrets/
+.secrets/
