@@ -8,6 +8,9 @@ A production-grade AI-powered document management system that automatically proc
 - [Architecture](#architecture)
 - [Document Lifecycle](#document-lifecycle)
 - [AI Processing Strategy](#ai-processing-strategy)
+- [AI Cost-Awareness & Guardrails](#ai-cost-awareness--guardrails)
+- [Human-in-the-Loop Controls](#human-in-the-loop-controls)
+- [Premium UI & UX](#premium-ui--ux)
 - [Grouping Design](#grouping-design)
 - [Supabase Usage Rationale](#supabase-usage-rationale)
 - [Deployment Strategy](#deployment-strategy)
@@ -34,6 +37,9 @@ Modern knowledge workers face significant challenges in managing and extracting 
 - Suggests intelligent groupings based on semantic similarity
 - Provides search and filtering capabilities across content
 - Maintains a non-blocking, resilient architecture that handles failures gracefully
+- Offers human-in-the-loop controls for AI-generated content
+- Provides cost-aware processing with intelligent guardrails
+- Features premium, luxury UI with dark mode support
 
 ## Architecture
 
@@ -261,6 +267,129 @@ ai-document-vault/
 - **Prompt Engineering**: Structured prompts for consistent output
 - **Token Management**: Input truncation for large documents
 
+## AI Cost-Awareness & Guardrails
+
+### Cost Estimation
+
+The system includes lightweight cost awareness to help manage AI processing costs:
+
+- **Estimation Logic**: Estimates processing complexity based on file size and type
+  - PDF: ~50KB per page average
+  - DOC/DOCX: ~30KB per page average
+- **Complexity Levels**: `small` (< 10 pages), `medium` (10-50), `large` (50-100), `very_large` (> 100)
+- **Non-blocking**: Cost awareness is informational only - never blocks processing
+- **User-Friendly Messages**: Calm, informative messages like "This document may take longer to process"
+
+### Implementation
+
+**Backend**:
+- Cost estimation runs before AI processing
+- Logs large document warnings (non-blocking)
+- Returns cost metadata in upload response (optional)
+
+**Frontend**:
+- Displays cost awareness messages for large documents
+- Uses premium blue/sapphire styling (non-alarming)
+- Messages are dismissible and fade in smoothly
+
+### Philosophy
+
+> Design AI systems with cost and scale in mind, even at prototype stage.
+
+- No exact dollar values shown to users
+- No scary warnings or hard blocking
+- Informative and helpful, not restrictive
+- Lightweight heuristics, no external dependencies
+
+## Human-in-the-Loop Controls
+
+### Edit & Regenerate Workflow
+
+Users have full control over AI-generated content with an accept/reject workflow:
+
+**Features**:
+- **Edit AI Content**: Users can edit AI-generated summaries and markdown
+- **Regenerate Independently**: Regenerate summary or markdown separately
+- **Accept/Reject Changes**: After edit or regenerate, users must explicitly accept or reject changes
+- **Diff View**: Line-by-line diff showing what changed (additions in green, deletions in red)
+- **Source Tracking**: Database tracks whether content is `ai_generated` or `user_modified`
+
+**Workflow**:
+1. User edits or regenerates content
+2. Diff view appears automatically showing changes
+3. User must choose:
+   - **Accept**: Keeps new content, diff disappears
+   - **Reject**: Reverts to previous content via API call
+4. Once accepted/rejected, edit/regenerate actions are re-enabled
+
+**Database Schema**:
+- `summary_source`: Tracks source of summary (`ai_generated` or `user_modified`)
+- `markdown_source`: Tracks source of markdown (`ai_generated` or `user_modified`)
+
+**Philosophy**: AI assists. Humans decide. No auto-overwriting of user edits.
+
+## Premium UI & UX
+
+### Design System
+
+**Luxury Color Palette**:
+- **Gold**: Premium accent color (`luxury-gold-*`) for interactive elements
+- **Platinum**: Sophisticated neutrals (`luxury-platinum-*`) for backgrounds and text
+- **Sapphire**: Rich blues (`luxury-sapphire-*`) for informational messages
+- **Cream**: Warm neutrals (`luxury-cream-*`) for light backgrounds
+- **Charcoal/Black**: Deep darks for dark mode
+
+**Premium Animations**:
+- Fade-in animations (`fade-in`, `fade-in-up`, `fade-in-down`)
+- Slide animations (`slide-in-right`, `slide-in-left`)
+- Scale animations (`scale-in`)
+- Shimmer effects for skeleton loaders
+- Soft pulse animations
+- Gold glow effects on hover
+
+**Luxury Shadows**:
+- `shadow-luxury`: Subtle depth
+- `shadow-luxury-lg`: Medium depth
+- `shadow-luxury-xl`: Strong depth
+- `shadow-gold-glow`: Gold glow effect
+
+**Special Effects**:
+- Glass morphism with backdrop blur
+- Gradient text for headings
+- Premium selection colors
+- Smooth scrolling globally
+
+### Dark Mode
+
+- **Theme Toggle**: Icon button in header (sun ↔ moon)
+- **Persistent**: User preference saved to localStorage
+- **No Flicker**: Theme applied before UI renders
+- **Apple-Style**: Soft contrast, not high-contrast
+- **Full Coverage**: All components adapt automatically
+
+### Skeleton Loaders
+
+Replaced all loading spinners with Apple-style skeleton loaders:
+- Match final layout dimensions (prevent layout shift)
+- Subtle shimmer animation
+- Applied to: document list, sidebar groups, document viewer, content panels
+- Smooth transitions when data loads
+
+### File Validation
+
+**Strict Validation** (Frontend + Backend):
+- **Allowed Types**: PDF (.pdf), Word (.doc, .docx) only
+- **Validation**: Both MIME type and file extension checked
+- **User-Friendly Errors**: Clear messages about allowed formats
+- **Size Limit**: 50MB maximum (configurable)
+
+### Sidebar Enhancements
+
+- **Full Height**: Sidebar spans entire screen height
+- **Toggleable**: Can be shown/hidden with smooth slide animation
+- **Persistent State**: Sidebar open/closed state saved to localStorage
+- **Responsive**: Main content adjusts margin when sidebar is open
+
 ## Grouping Design
 
 ### Group Types
@@ -452,9 +581,9 @@ See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for detailed deployment instructions.
 - **Future**: Implement job queue (Bull, BullMQ, or Supabase Queue) for better scalability
 
 **3. File Type Support**
-- **Current**: PDF and text files supported
-- **Trade-off**: Limited file type coverage
-- **Future**: Add DOCX, PPTX, images with OCR, etc.
+- **Current**: PDF, DOC, and DOCX files supported with strict validation
+- **Trade-off**: Limited file type coverage, but ensures quality
+- **Future**: Add PPTX, images with OCR, etc.
 
 **4. Search Implementation**
 - **Current**: PostgreSQL `ilike` queries (case-insensitive pattern matching)
@@ -475,10 +604,11 @@ See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for detailed deployment instructions.
 
 **Short-term (1-3 months)**:
 1. **Real-time Status Updates**: Replace polling with Supabase subscriptions
-2. **Enhanced File Support**: Add DOCX, PPTX parsing
+2. **Enhanced File Support**: Add PPTX, images with OCR parsing
 3. **Better Search**: PostgreSQL full-text search with ranking
 4. **Batch Operations**: Upload and process multiple files
 5. **Export Functionality**: Export documents and groups
+6. **Cost Analytics**: Track and display processing costs over time
 
 **Medium-term (3-6 months)**:
 1. **Job Queue**: Implement proper queue system for AI processing
@@ -580,8 +710,10 @@ npm run build --workspace=apps/api
 - **React 18**: UI framework with hooks
 - **TypeScript**: Type safety
 - **Vite**: Fast build tool and dev server
-- **Tailwind CSS**: Utility-first styling
+- **Tailwind CSS**: Utility-first styling with custom luxury color palette
 - **react-markdown**: Markdown rendering
+- **Theme System**: Dark mode with localStorage persistence
+- **Skeleton Loaders**: Apple-style loading states
 
 ### Backend
 - **Node.js**: Runtime environment
@@ -620,6 +752,7 @@ import {
 **Key Types**:
 - `Document`: Document metadata and AI outputs
 - `DocumentStatus`: Enum (UPLOADED, PROCESSING, READY, FAILED)
+- `ContentSource`: Enum (AI_GENERATED, USER_MODIFIED) - tracks content origin
 - `Group`: Group definition with type
 - `GroupType`: Enum (MANUAL, AI_SUGGESTED, SMART)
 - `ApiResponse<T>`: Standardized API response wrapper
@@ -628,12 +761,14 @@ import {
 ### Frontend (`apps/web`)
 
 **Components**:
-- `DocumentUpload`: Drag-and-drop file upload
-- `DocumentList`: List of documents with status badges
-- `DocumentView`: Document viewer with tabs (Original, Summary, Markdown)
-- `GroupSidebar`: Group navigation and management
+- `DocumentUpload`: Drag-and-drop file upload with cost awareness
+- `DocumentList`: List of documents with premium status badges
+- `DocumentView`: Document viewer with tabs (Original, Summary, Markdown) and edit/regenerate controls
+- `GroupSidebar`: Toggleable group navigation and management (full height)
 - `AIGroupSuggestions`: AI grouping suggestions UI
-- `SearchAndFilter`: Search and filtering interface
+- `SearchAndFilter`: Premium search and filtering interface
+- `ThemeToggle`: Dark/light mode switcher
+- `Skeleton`: Apple-style skeleton loaders for all loading states
 - `ErrorBoundary`: React error boundary for graceful failures
 - `ErrorDisplay`: Consistent error message display
 
@@ -649,6 +784,8 @@ import {
 
 **Routes**:
 - `documents/`: Upload, list, get, delete, search, retry
+- `documents/:id/content`: Update document content (PATCH)
+- `documents/:id/regenerate`: Regenerate AI content (POST)
 - `groups/`: Create, list, delete, suggest, manage memberships
 
 **Libraries**:
@@ -656,6 +793,7 @@ import {
 - `lib/storage`: File upload, download, signed URL generation
 - `lib/ai/claude`: Claude API integration
 - `lib/ai/processor`: Document processing workflow
+- `lib/ai/cost-estimation`: Lightweight cost estimation utility
 
 **Serverless Functions**:
 - `api/`: Vercel/Netlify function wrappers
