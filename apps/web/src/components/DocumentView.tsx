@@ -40,20 +40,20 @@ export function DocumentView({ documentId, onClose, onUpdate }: DocumentViewProp
   const [activeTab, setActiveTab] = useState<ViewTab>('original');
 
   const loadDocument = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
+      try {
+        setLoading(true);
+        setError(null);
 
-      const doc = await getDocument(documentId);
-      setDocument(doc);
-    } catch (err) {
-      const apiError =
-        err instanceof ApiClientError
-          ? err
-          : new ApiClientError('LOAD_ERROR', 'Failed to load document', 'UNKNOWN_ERROR');
-      setError(apiError.message);
-    } finally {
-      setLoading(false);
+        const doc = await getDocument(documentId);
+          setDocument(doc);
+      } catch (err) {
+          const apiError =
+            err instanceof ApiClientError
+              ? err
+              : new ApiClientError('LOAD_ERROR', 'Failed to load document', 'UNKNOWN_ERROR');
+          setError(apiError.message);
+      } finally {
+          setLoading(false);
     }
   }, [documentId]);
 
@@ -283,6 +283,9 @@ function SummaryView({
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(document.summary || '');
+  const [previousContent, setPreviousContent] = useState<string | null>(null);
+  const [showDiff, setShowDiff] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   
   // Update edited content when document changes
   useEffect(() => {
@@ -290,11 +293,20 @@ function SummaryView({
       setEditedContent(document.summary || '');
     }
   }, [document.summary, isEditing]);
+  
   const [isSaving, setIsSaving] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isUserModified = (document.summary_source ?? ContentSource.AI_GENERATED) === ContentSource.USER_MODIFIED;
+  
+  // Clear success message after 5 seconds
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => setSuccessMessage(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
 
   const handleSave = async () => {
     if (!editedContent.trim()) {
@@ -304,12 +316,41 @@ function SummaryView({
     
     setIsSaving(true);
     setError(null);
+    setSuccessMessage(null);
     try {
+      const oldContent = document.summary || '';
       const updated = await updateDocumentContent(document.id, { summary: editedContent.trim() });
       onUpdate(updated);
+      setPreviousContent(oldContent);
+      setShowDiff(true);
       setIsEditing(false);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'Failed to save changes');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  
+  const handleAcceptChanges = () => {
+    setPreviousContent(null);
+    setShowDiff(false);
+    setSuccessMessage(null);
+  };
+  
+  const handleRejectChanges = async () => {
+    if (!previousContent) return;
+    
+    setIsSaving(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const updated = await updateDocumentContent(document.id, { summary: previousContent });
+      onUpdate(updated);
+      setPreviousContent(null);
+      setShowDiff(false);
+      setSuccessMessage('Changes reverted to previous version');
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Failed to revert changes');
     } finally {
       setIsSaving(false);
     }
@@ -324,11 +365,23 @@ function SummaryView({
   const handleRegenerate = async () => {
     setIsRegenerating(true);
     setError(null);
+    setSuccessMessage(null);
     try {
+      // Capture old content BEFORE regeneration
+      const oldContent = document.summary || '';
+      
+      // Regenerate and get updated document
       const updated = await regenerateDocumentContent(document.id, 'summary');
+      
+      // Set previous content and show diff - this must happen before onUpdate
+      setPreviousContent(oldContent);
+      setShowDiff(true);
+      
+      // Update document state
       onUpdate(updated);
-      // Reload to get fresh document with signed_url
-      await onReload();
+      
+      // Note: We don't need to reload since regenerateDocumentContent returns the updated document
+      // onReload() would fetch from API again, which might cause timing issues with diff display
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'Failed to regenerate summary');
     } finally {
@@ -346,6 +399,85 @@ function SummaryView({
     );
   }
 
+  const renderDiff = () => {
+    if (!previousContent || !document.summary || !showDiff) return null;
+    
+    const oldLines = previousContent.split('\n');
+    const newLines = document.summary.split('\n');
+    const maxLines = Math.max(oldLines.length, newLines.length);
+    
+    return (
+      <div className="mt-4 p-4 bg-neutral-50 dark:bg-neutral-800/50 rounded-xl border border-neutral-200 dark:border-neutral-700">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-sm font-semibold text-neutral-900 dark:text-neutral-50">Review Changes</h4>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRejectChanges}
+              disabled={isSaving}
+              className="px-3 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors disabled:opacity-50"
+            >
+              {isSaving ? 'Reverting...' : 'Reject'}
+            </button>
+            <button
+              onClick={handleAcceptChanges}
+              disabled={isSaving}
+              className="px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg hover:bg-green-100 dark:hover:bg-green-950/50 transition-colors disabled:opacity-50"
+            >
+              Accept
+            </button>
+          </div>
+        </div>
+        <div className="space-y-1 max-h-64 overflow-auto font-mono text-xs">
+          {Array.from({ length: maxLines }).map((_, i) => {
+            const oldLine = oldLines[i] || '';
+            const newLine = newLines[i] || '';
+            const isChanged = oldLine !== newLine;
+            const isRemoved = i < oldLines.length && i >= newLines.length;
+            const isAdded = i >= oldLines.length && i < newLines.length;
+            
+            if (!isChanged && !isRemoved && !isAdded) {
+              return (
+                <div key={i} className="text-neutral-500 dark:text-neutral-500">
+                  <span className="inline-block w-8 text-right mr-2 text-neutral-400">{i + 1}</span>
+                  {oldLine || '\u00A0'}
+                </div>
+              );
+            }
+            
+            return (
+              <div key={i} className="flex gap-2">
+                {isRemoved && (
+                  <div className="flex-1 bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300 px-2 py-1 rounded">
+                    <span className="inline-block w-8 text-right mr-2 text-red-500">-</span>
+                    <del className="text-red-700 dark:text-red-400">{oldLine}</del>
+                  </div>
+                )}
+                {isAdded && (
+                  <div className="flex-1 bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-300 px-2 py-1 rounded">
+                    <span className="inline-block w-8 text-right mr-2 text-green-500">+</span>
+                    <ins className="text-green-700 dark:text-green-400 no-underline">{newLine}</ins>
+                  </div>
+                )}
+                {isChanged && !isRemoved && !isAdded && (
+                  <>
+                    <div className="flex-1 bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300 px-2 py-1 rounded">
+                      <span className="inline-block w-8 text-right mr-2 text-red-500">-</span>
+                      <del className="text-red-700 dark:text-red-400">{oldLine}</del>
+                    </div>
+                    <div className="flex-1 bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-300 px-2 py-1 rounded">
+                      <span className="inline-block w-8 text-right mr-2 text-green-500">+</span>
+                      <ins className="text-green-700 dark:text-green-400 no-underline">{newLine}</ins>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -355,21 +487,28 @@ function SummaryView({
               Edited by user
             </span>
           )}
+          {successMessage && (
+            <span className="text-xs font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 px-2 py-1 rounded">
+              {successMessage}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {!isEditing && (
             <>
               <button
                 onClick={handleRegenerate}
-                disabled={isRegenerating}
-                className="text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 px-2 py-1 rounded transition-colors disabled:opacity-50"
-                title="Regenerate summary"
+                disabled={isRegenerating || (previousContent !== null && showDiff)}
+                className="text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 px-2 py-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title={previousContent !== null && showDiff ? "Please accept or reject current changes first" : "Regenerate summary"}
               >
                 {isRegenerating ? 'Regenerating...' : 'Regenerate'}
               </button>
               <button
                 onClick={() => setIsEditing(true)}
-                className="text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 px-2 py-1 rounded transition-colors"
+                disabled={previousContent !== null && showDiff}
+                className="text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 px-2 py-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title={previousContent !== null && showDiff ? "Please accept or reject current changes first" : "Edit summary"}
               >
                 Edit
               </button>
@@ -411,9 +550,12 @@ function SummaryView({
           </div>
         </div>
       ) : (
-        <div className="prose prose-slate max-w-none">
-          <p className="text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{document.summary}</p>
-        </div>
+        <>
+          <div className="prose prose-slate max-w-none">
+            <p className="text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{document.summary}</p>
+          </div>
+          {renderDiff()}
+        </>
       )}
     </div>
   );
@@ -430,18 +572,31 @@ function MarkdownView({
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(document.markdown || '');
+  const [previousContent, setPreviousContent] = useState<string | null>(null);
+  const [showDiff, setShowDiff] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   
-  // Update edited content when document changes
+  // Update edited content when document changes (but preserve diff state)
   useEffect(() => {
     if (!isEditing) {
       setEditedContent(document.markdown || '');
     }
+    // Don't clear previousContent or showDiff when document changes - user needs to accept/reject first
   }, [document.markdown, isEditing]);
+  
   const [isSaving, setIsSaving] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isUserModified = (document.markdown_source ?? ContentSource.AI_GENERATED) === ContentSource.USER_MODIFIED;
+  
+  // Clear success message after 5 seconds
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => setSuccessMessage(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
 
   const handleSave = async () => {
     if (!editedContent.trim()) {
@@ -451,12 +606,41 @@ function MarkdownView({
     
     setIsSaving(true);
     setError(null);
+    setSuccessMessage(null);
     try {
+      const oldContent = document.markdown || '';
       const updated = await updateDocumentContent(document.id, { markdown: editedContent.trim() });
       onUpdate(updated);
+      setPreviousContent(oldContent);
+      setShowDiff(true);
       setIsEditing(false);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'Failed to save changes');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  
+  const handleAcceptChanges = () => {
+    setPreviousContent(null);
+    setShowDiff(false);
+    setSuccessMessage(null);
+  };
+  
+  const handleRejectChanges = async () => {
+    if (!previousContent) return;
+    
+    setIsSaving(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const updated = await updateDocumentContent(document.id, { markdown: previousContent });
+      onUpdate(updated);
+      setPreviousContent(null);
+      setShowDiff(false);
+      setSuccessMessage('Changes reverted to previous version');
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Failed to revert changes');
     } finally {
       setIsSaving(false);
     }
@@ -471,11 +655,23 @@ function MarkdownView({
   const handleRegenerate = async () => {
     setIsRegenerating(true);
     setError(null);
+    setSuccessMessage(null);
     try {
+      // Capture old content BEFORE regeneration
+      const oldContent = document.markdown || '';
+      
+      // Regenerate and get updated document
       const updated = await regenerateDocumentContent(document.id, 'markdown');
+      
+      // Set previous content and show diff - this must happen before onUpdate
+      setPreviousContent(oldContent);
+      setShowDiff(true);
+      
+      // Update document state
       onUpdate(updated);
-      // Reload to get fresh document with signed_url
-      await onReload();
+      
+      // Note: We don't need to reload since regenerateDocumentContent returns the updated document
+      // onReload() would fetch from API again, which might cause timing issues with diff display
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'Failed to regenerate markdown');
     } finally {
@@ -493,6 +689,85 @@ function MarkdownView({
     );
   }
 
+  const renderDiff = () => {
+    if (!previousContent || !document.markdown || !showDiff) return null;
+    
+    const oldLines = previousContent.split('\n');
+    const newLines = document.markdown.split('\n');
+    const maxLines = Math.max(oldLines.length, newLines.length);
+    
+    return (
+      <div className="mt-4 p-4 bg-neutral-50 dark:bg-neutral-800/50 rounded-xl border border-neutral-200 dark:border-neutral-700">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-sm font-semibold text-neutral-900 dark:text-neutral-50">Review Changes</h4>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRejectChanges}
+              disabled={isSaving}
+              className="px-3 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors disabled:opacity-50"
+            >
+              {isSaving ? 'Reverting...' : 'Reject'}
+            </button>
+            <button
+              onClick={handleAcceptChanges}
+              disabled={isSaving}
+              className="px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg hover:bg-green-100 dark:hover:bg-green-950/50 transition-colors disabled:opacity-50"
+            >
+              Accept
+            </button>
+          </div>
+        </div>
+        <div className="space-y-1 max-h-64 overflow-auto font-mono text-xs">
+          {Array.from({ length: maxLines }).map((_, i) => {
+            const oldLine = oldLines[i] || '';
+            const newLine = newLines[i] || '';
+            const isChanged = oldLine !== newLine;
+            const isRemoved = i < oldLines.length && i >= newLines.length;
+            const isAdded = i >= oldLines.length && i < newLines.length;
+            
+            if (!isChanged && !isRemoved && !isAdded) {
+              return (
+                <div key={i} className="text-neutral-500 dark:text-neutral-500">
+                  <span className="inline-block w-8 text-right mr-2 text-neutral-400">{i + 1}</span>
+                  {oldLine || '\u00A0'}
+                </div>
+              );
+            }
+            
+            return (
+              <div key={i} className="flex gap-2">
+                {isRemoved && (
+                  <div className="flex-1 bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300 px-2 py-1 rounded">
+                    <span className="inline-block w-8 text-right mr-2 text-red-500">-</span>
+                    <del className="text-red-700 dark:text-red-400">{oldLine}</del>
+                  </div>
+                )}
+                {isAdded && (
+                  <div className="flex-1 bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-300 px-2 py-1 rounded">
+                    <span className="inline-block w-8 text-right mr-2 text-green-500">+</span>
+                    <ins className="text-green-700 dark:text-green-400 no-underline">{newLine}</ins>
+                  </div>
+                )}
+                {isChanged && !isRemoved && !isAdded && (
+                  <>
+                    <div className="flex-1 bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300 px-2 py-1 rounded">
+                      <span className="inline-block w-8 text-right mr-2 text-red-500">-</span>
+                      <del className="text-red-700 dark:text-red-400">{oldLine}</del>
+                    </div>
+                    <div className="flex-1 bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-300 px-2 py-1 rounded">
+                      <span className="inline-block w-8 text-right mr-2 text-green-500">+</span>
+                      <ins className="text-green-700 dark:text-green-400 no-underline">{newLine}</ins>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -502,21 +777,28 @@ function MarkdownView({
               Edited by user
             </span>
           )}
+          {successMessage && (
+            <span className="text-xs font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 px-2 py-1 rounded">
+              {successMessage}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {!isEditing && (
             <>
               <button
                 onClick={handleRegenerate}
-                disabled={isRegenerating}
-                className="text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 px-2 py-1 rounded transition-colors disabled:opacity-50"
-                title="Regenerate markdown"
+                disabled={isRegenerating || (previousContent !== null && showDiff)}
+                className="text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 px-2 py-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title={previousContent !== null && showDiff ? "Please accept or reject current changes first" : "Regenerate markdown"}
               >
                 {isRegenerating ? 'Regenerating...' : 'Regenerate'}
               </button>
               <button
                 onClick={() => setIsEditing(true)}
-                className="text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 px-2 py-1 rounded transition-colors"
+                disabled={previousContent !== null && showDiff}
+                className="text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 px-2 py-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title={previousContent !== null && showDiff ? "Please accept or reject current changes first" : "Edit markdown"}
               >
                 Edit
               </button>
@@ -558,18 +840,21 @@ function MarkdownView({
           </div>
         </div>
       ) : (
-        <div className="prose prose-slate max-w-none dark:prose-invert">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              a: ({ node, ...props }) => (
-                <a {...props} target="_blank" rel="noopener noreferrer" />
-              ),
-            }}
-          >
-            {document.markdown}
-          </ReactMarkdown>
-        </div>
+        <>
+          <div className="prose prose-slate max-w-none dark:prose-invert">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          a: ({ node, ...props }) => (
+            <a {...props} target="_blank" rel="noopener noreferrer" />
+          ),
+        }}
+      >
+              {document.markdown}
+      </ReactMarkdown>
+          </div>
+          {renderDiff()}
+        </>
       )}
     </div>
   );

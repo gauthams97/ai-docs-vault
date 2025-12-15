@@ -311,7 +311,6 @@ function DocumentItem({
           onClose={() => setShowViewer(false)}
           onUpdate={(updatedDoc) => {
             onUpdate?.(updatedDoc);
-            setShowViewer(false);
           }}
         />
       )}
