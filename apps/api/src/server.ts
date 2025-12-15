@@ -6,7 +6,7 @@ const PORT = process.env.API_PORT || 3001;
 export function createServer() {
   const server = http.createServer(async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
     if (req.method === 'OPTIONS') {
@@ -35,6 +35,20 @@ export function createServer() {
       const retryMatch = url.pathname.match(/^\/api\/documents\/([^/]+)\/retry$/);
       if (retryMatch && req.method === 'POST') {
         await handleRetry(req, res, retryMatch[1]);
+        return;
+      }
+
+      // Route to update document content
+      const updateContentMatch = url.pathname.match(/^\/api\/documents\/([^/]+)\/content$/);
+      if (updateContentMatch && req.method === 'PATCH') {
+        await handleUpdateContent(req, res, updateContentMatch[1]);
+        return;
+      }
+
+      // Route to regenerate document content
+      const regenerateMatch = url.pathname.match(/^\/api\/documents\/([^/]+)\/regenerate$/);
+      if (regenerateMatch && req.method === 'POST') {
+        await handleRegenerateContent(req, res, regenerateMatch[1]);
         return;
       }
 
@@ -140,6 +154,74 @@ async function handleRetry(req: IncomingMessage, res: ServerResponse, documentId
     await sendResponse(res, response);
   } catch (error) {
     console.error('Retry handler error:', error);
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        error: 'INTERNAL_ERROR',
+        message: error instanceof Error ? error.message : 'Internal server error',
+      })
+    );
+  }
+}
+
+/**
+ * Handle update document content request
+ */
+async function handleUpdateContent(req: IncomingMessage, res: ServerResponse, documentId: string) {
+  try {
+    const { PATCH } = await import('./routes/documents/update-content.js');
+    const body = await getRequestBody(req);
+    const headers = new Headers();
+    Object.entries(req.headers).forEach(([key, value]) => {
+      if (value && key !== 'host') {
+        headers.set(key, Array.isArray(value) ? value.join(', ') : value);
+      }
+    });
+
+    const request = new Request(`http://${req.headers.host}${req.url}`, {
+      method: req.method || 'PATCH',
+      headers,
+      body: body ? body : undefined,
+    });
+
+    const response = await PATCH(request, { params: { id: documentId } });
+    await sendResponse(res, response);
+  } catch (error) {
+    console.error('Update content handler error:', error);
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        error: 'INTERNAL_ERROR',
+        message: error instanceof Error ? error.message : 'Internal server error',
+      })
+    );
+  }
+}
+
+/**
+ * Handle regenerate document content request
+ */
+async function handleRegenerateContent(req: IncomingMessage, res: ServerResponse, documentId: string) {
+  try {
+    const { POST } = await import('./routes/documents/regenerate-content.js');
+    const body = await getRequestBody(req);
+    const headers = new Headers();
+    Object.entries(req.headers).forEach(([key, value]) => {
+      if (value && key !== 'host') {
+        headers.set(key, Array.isArray(value) ? value.join(', ') : value);
+      }
+    });
+
+    const request = new Request(`http://${req.headers.host}${req.url}`, {
+      method: req.method || 'POST',
+      headers,
+      body: body ? body : undefined,
+    });
+
+    const response = await POST(request, { params: { id: documentId } });
+    await sendResponse(res, response);
+  } catch (error) {
+    console.error('Regenerate content handler error:', error);
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({

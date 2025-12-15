@@ -307,3 +307,119 @@ export async function retryDocument(id: string): Promise<Document> {
     );
   }
 }
+
+/**
+ * Update document content (summary or markdown)
+ * 
+ * Allows users to edit AI-generated content. Marks content as user_modified.
+ * 
+ * @param id - Document ID
+ * @param updates - Object with summary and/or markdown to update
+ * @returns Updated document
+ */
+export async function updateDocumentContent(
+  id: string,
+  updates: { summary?: string | null; markdown?: string | null }
+): Promise<Document> {
+  const baseUrl = getApiUrl();
+  const url = `${baseUrl}/api/documents/${id}/content`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updates),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const apiError = data as ApiError;
+      throw ApiClientError.fromResponse(apiError, response.status);
+    }
+
+    const apiResponse = data as ApiResponse<Document>;
+    return apiResponse.data;
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw error;
+    }
+
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      throw new ApiClientError(
+        'NETWORK_ERROR',
+        `Cannot connect to the API server at ${apiUrl}. Make sure the API is running.`,
+        'NETWORK_ERROR',
+        0
+      );
+    }
+
+    throw new ApiClientError(
+      'UNKNOWN_ERROR',
+      error instanceof Error ? error.message : 'An unknown error occurred',
+      'UNKNOWN_ERROR',
+      0
+    );
+  }
+}
+
+/**
+ * Regenerate document content (summary or markdown)
+ * 
+ * Regenerates AI content for a document. Only regenerates if explicitly requested.
+ * 
+ * @param id - Document ID
+ * @param type - 'summary' or 'markdown'
+ * @returns Updated document
+ */
+export async function regenerateDocumentContent(
+  id: string,
+  type: 'summary' | 'markdown'
+): Promise<Document> {
+  const baseUrl = getApiUrl();
+  const url = `${baseUrl}/api/documents/${id}/regenerate`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ type }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const apiError = data as ApiError;
+      throw ApiClientError.fromResponse(apiError, response.status);
+    }
+
+    const apiResponse = data as ApiResponse<Document>;
+    return apiResponse.data;
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw error;
+    }
+
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      throw new ApiClientError(
+        'NETWORK_ERROR',
+        `Cannot connect to the API server at ${apiUrl}. Make sure the API is running.`,
+        'NETWORK_ERROR',
+        0
+      );
+    }
+
+    throw new ApiClientError(
+      'UNKNOWN_ERROR',
+      error instanceof Error ? error.message : 'An unknown error occurred',
+      'UNKNOWN_ERROR',
+      0
+    );
+  }
+}

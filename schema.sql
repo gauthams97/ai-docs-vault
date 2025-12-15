@@ -34,6 +34,8 @@ CREATE TABLE documents (
   storage_path TEXT NOT NULL,
   summary TEXT,                    -- AI-generated summary, nullable
   markdown TEXT,                    -- Processed markdown content, nullable
+  summary_source TEXT DEFAULT 'ai_generated' CHECK (summary_source IN ('ai_generated', 'user_modified')),
+  markdown_source TEXT DEFAULT 'ai_generated' CHECK (markdown_source IN ('ai_generated', 'user_modified')),
   status document_status NOT NULL DEFAULT 'UPLOADED',
   ai_model TEXT,                    -- Model identifier (e.g., "gpt-4", "claude-3"), nullable
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -96,8 +98,10 @@ CREATE INDEX idx_document_groups_composite ON document_groups(group_id, document
 COMMENT ON TABLE documents IS 'Stores document metadata, content, and AI processing status';
 COMMENT ON COLUMN documents.status IS 'Current processing state: UPLOADED, PROCESSING, READY, or FAILED';
 COMMENT ON COLUMN documents.storage_path IS 'Path to the document file in Supabase Storage';
-COMMENT ON COLUMN documents.summary IS 'AI-generated summary of the document, null until processing completes';
-COMMENT ON COLUMN documents.markdown IS 'Processed markdown content, null until processing completes';
+COMMENT ON COLUMN documents.summary IS 'Summary content of the document, null until processing completes';
+COMMENT ON COLUMN documents.markdown IS 'Markdown content of the document, null until processing completes';
+COMMENT ON COLUMN documents.summary_source IS 'Source of summary: ai_generated (from AI processing) or user_modified (edited by user)';
+COMMENT ON COLUMN documents.markdown_source IS 'Source of markdown: ai_generated (from AI processing) or user_modified (edited by user)';
 COMMENT ON COLUMN documents.ai_model IS 'Identifier of the AI model used for processing (e.g., "gpt-4", "claude-3")';
 
 COMMENT ON TABLE groups IS 'Organizes documents into collections with different types (MANUAL, AI_SUGGESTED, SMART)';

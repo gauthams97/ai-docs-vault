@@ -29,7 +29,55 @@ export async function POST(request: Request): Promise<Response> {
           message: 'File name is required.',
           code: 'INVALID_FILENAME',
         } as ApiError,
-        { status: 400 }
+        { 
+          status: 400,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+    }
+
+    // Strict file type validation: PDF, DOC, DOCX only
+    const allowedMimeTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    
+    const allowedExtensions = ['.pdf', '.doc', '.docx'];
+    
+    // Get file extension
+    const fileName = file.name.toLowerCase();
+    const fileExtension = fileName.substring(fileName.lastIndexOf('.'));
+    
+    // Validate MIME type
+    const isValidMimeType = file.type && allowedMimeTypes.includes(file.type);
+    
+    // Validate file extension
+    const isValidExtension = allowedExtensions.includes(fileExtension);
+    
+    if (!isValidMimeType || !isValidExtension) {
+      return Response.json(
+        {
+          error: 'VALIDATION_ERROR',
+          message: 'Invalid file type. Only PDF (.pdf), Word (.doc), and Word (.docx) files are allowed.',
+          code: 'INVALID_FILE_TYPE',
+          details: {
+            provided_mime_type: file.type || 'unknown',
+            provided_extension: fileExtension || 'none',
+            allowed_types: allowedMimeTypes,
+            allowed_extensions: allowedExtensions,
+          },
+        } as ApiError,
+        { 
+          status: 400,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Content-Type': 'application/json',
+          },
+        }
       );
     }
 
@@ -41,7 +89,13 @@ export async function POST(request: Request): Promise<Response> {
           message: `File size exceeds ${maxFileSize / 1024 / 1024}MB limit.`,
           code: 'FILE_TOO_LARGE',
         } as ApiError,
-        { status: 400 }
+        { 
+          status: 400,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Content-Type': 'application/json',
+          },
+        }
       );
     }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Document } from '@ai-document-vault/shared';
 import { DocumentUpload } from './components/DocumentUpload';
 import { DocumentList } from './components/DocumentList';
@@ -12,6 +12,8 @@ import { getDocuments } from './lib/api/client';
 import { getGroupDocuments } from './lib/api/groups';
 import { searchDocuments } from './lib/api/search';
 import type { SearchParams } from './lib/api/search';
+import { ThemeToggle } from './components/ThemeToggle';
+import { DocumentItemSkeleton } from './components/Skeleton';
 
 function App() {
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -24,205 +26,212 @@ function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [minLoadingTime, setMinLoadingTime] = useState(false);
 
-  /**
-   * Load existing documents from database on mount
-   * 
-   * Explicit error handling: Log and display errors to user.
-   */
   useEffect(() => {
     async function loadDocuments() {
       try {
         setIsLoadingDocuments(true);
         setLoadError(null);
+        setMinLoadingTime(true);
+        const startTime = Date.now();
+        
         const docs = await getDocuments(false) as Document[];
+        
+        const elapsed = Date.now() - startTime;
+        const minDelay = 300;
+        if (elapsed < minDelay) {
+          await new Promise(resolve => setTimeout(resolve, minDelay - elapsed));
+        }
+        
         setDocuments(docs);
       } catch (error) {
-        console.error('[App] Failed to load documents:', error);
         const errorMessage = error instanceof ApiClientError
           ? error.message
           : 'Failed to load documents. Please refresh the page.';
         setLoadError(errorMessage);
       } finally {
         setIsLoadingDocuments(false);
+        setTimeout(() => setMinLoadingTime(false), 100);
       }
     }
 
     loadDocuments();
   }, []);
 
-  /**
-   * Handle search/filter changes
-   */
   useEffect(() => {
+    let cancelled = false;
+    
     async function performSearch() {
-      // If no search params, use regular document list
       const hasSearchParams = searchParams.query || searchParams.status || searchParams.groupId;
       
       if (!hasSearchParams && !selectedGroupId) {
-        // No search/filter, load all documents
-        try {
+        if (documents.length === 0) {
           setIsLoadingDocuments(true);
-          const docs = await getDocuments(false) as Document[];
-          setDocuments(docs);
-        } catch (error) {
-          console.error('Failed to load documents:', error);
-        } finally {
-          setIsLoadingDocuments(false);
+          setMinLoadingTime(true);
+          const startTime = Date.now();
+          
+          try {
+            const docs = await getDocuments(false) as Document[];
+            
+            const elapsed = Date.now() - startTime;
+            const minDelay = 300;
+            if (elapsed < minDelay) {
+              await new Promise(resolve => setTimeout(resolve, minDelay - elapsed));
+            }
+            
+            if (!cancelled) {
+              setDocuments(docs);
+            }
+          } finally {
+            if (!cancelled) {
+              setIsLoadingDocuments(false);
+              setTimeout(() => setMinLoadingTime(false), 100);
+            }
+          }
         }
         return;
       }
 
-      // Perform search
-      setIsSearching(true);
-      setSearchError(null);
+      if (!cancelled) {
+        setIsSearching(true);
+        setSearchError(null);
+        setMinLoadingTime(true);
+      }
+      
+      const startTime = Date.now();
+      
       try {
         const searchParamsWithGroup = { ...searchParams };
-        // If viewing a group, include it in search params
         if (selectedGroupId) {
           searchParamsWithGroup.groupId = selectedGroupId;
         }
 
         const results = await searchDocuments(searchParamsWithGroup);
         
-        if (selectedGroupId) {
-          setGroupDocuments(results);
-        } else {
-          setDocuments(results);
+        const elapsed = Date.now() - startTime;
+        const minDelay = 300;
+        if (elapsed < minDelay) {
+          await new Promise(resolve => setTimeout(resolve, minDelay - elapsed));
+        }
+        
+        if (!cancelled) {
+          if (selectedGroupId) {
+            setGroupDocuments(results);
+          } else {
+            setDocuments(results);
+          }
         }
       } catch (error) {
-        console.error('[App] Failed to search documents:', error);
-        const errorMessage = error instanceof ApiClientError
-          ? error.message
-          : 'Search failed. Please try again.';
-        setSearchError(errorMessage);
+        if (!cancelled) {
+          const errorMessage = error instanceof ApiClientError
+            ? error.message
+            : 'Search failed. Please try again.';
+          setSearchError(errorMessage);
+        }
       } finally {
-        setIsSearching(false);
+        if (!cancelled) {
+          setIsSearching(false);
+          setTimeout(() => setMinLoadingTime(false), 100);
+        }
       }
     }
 
     performSearch();
-  }, [searchParams, selectedGroupId]);
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, selectedGroupId, documents.length]);
 
-  /**
-   * Handle successful document upload
-   * 
-   * Adds the document to the list. Status will update via polling.
-   */
-  const handleUploadSuccess = (document: Document) => {
-    // Add document to list - status will be updated via polling
+  const handleUploadSuccess = useCallback((document: Document) => {
     setDocuments((prev) => [document, ...prev]);
-  };
+  }, []);
 
-  /**
-   * Handle document update (from polling or retry)
-   */
-  const handleDocumentUpdate = (updatedDocument: Document) => {
+  const handleDocumentUpdate = useCallback((updatedDocument: Document) => {
     setDocuments((prev) =>
       prev.map((doc) => (doc.id === updatedDocument.id ? updatedDocument : doc))
     );
-  };
+    setGroupDocuments((prev) =>
+      prev.map((doc) => (doc.id === updatedDocument.id ? updatedDocument : doc))
+    );
+  }, []);
 
-  /**
-   * Handle document deletion
-   */
-  const handleDocumentDelete = (documentId: string) => {
+  const handleDocumentDelete = useCallback((documentId: string) => {
     setDocuments((prev) => prev.filter((doc) => doc.id !== documentId));
     setGroupDocuments((prev) => prev.filter((doc) => doc.id !== documentId));
-  };
+  }, []);
 
-  /**
-   * Handle group selection
-   */
-  const handleGroupSelect = async (groupId: string | null) => {
+  const handleGroupSelect = useCallback(async (groupId: string | null) => {
     setSelectedGroupId(groupId);
 
     if (groupId) {
-      // Load documents for selected group
       setIsLoadingGroupDocuments(true);
       try {
         const docs = await getGroupDocuments(groupId);
         setGroupDocuments(docs);
       } catch (error) {
-        console.error('Failed to load group documents:', error);
         setGroupDocuments([]);
       } finally {
         setIsLoadingGroupDocuments(false);
       }
     } else {
-      // Show all documents
       setGroupDocuments([]);
     }
-  };
+  }, []);
 
-  /**
-   * Handle group changes (refresh documents)
-   */
-  const handleGroupChange = async () => {
+  const handleGroupChange = useCallback(async () => {
     if (selectedGroupId) {
-      // Reload group documents
       setIsLoadingGroupDocuments(true);
       try {
         const docs = await getGroupDocuments(selectedGroupId);
         setGroupDocuments(docs);
-      } catch (error) {
-        console.error('Failed to reload group documents:', error);
       } finally {
         setIsLoadingGroupDocuments(false);
       }
     }
-  };
+  }, [selectedGroupId]);
 
-  /**
-   * Handle upload errors
-   * 
-   * Logs errors for debugging. User feedback is handled by DocumentUpload component.
-   */
-  const handleUploadError = (error: ApiClientError) => {
-    console.error('Document upload failed:', error);
+  const handleUploadError = useCallback(() => {
     // Error is already displayed in DocumentUpload component
-  };
+  }, []);
 
-  // Determine which documents to show
-  // When viewing a group, show groupDocuments; otherwise show all documents
-  const displayedDocuments = selectedGroupId ? groupDocuments : documents;
-  const isLoading = selectedGroupId 
-    ? (isLoadingGroupDocuments || isSearching)
-    : (isLoadingDocuments || isSearching);
+  const displayedDocuments = useMemo(() => {
+    return selectedGroupId ? groupDocuments : documents;
+  }, [selectedGroupId, groupDocuments, documents]);
 
-  /**
-   * Handle group membership changes (when document is added/removed from group)
-   * This refreshes the group view if viewing a group, but doesn't affect the main documents list
-   */
-  const handleGroupMembershipChange = () => {
-    // Only refresh if we're currently viewing a group
+  const isLoading = useMemo(() => {
+    return selectedGroupId 
+      ? (isLoadingGroupDocuments || isSearching || minLoadingTime)
+      : (isLoadingDocuments || isSearching || minLoadingTime);
+  }, [selectedGroupId, isLoadingGroupDocuments, isSearching, isLoadingDocuments, minLoadingTime]);
+
+  const handleGroupMembershipChange = useCallback(() => {
     if (selectedGroupId) {
       handleGroupChange();
     }
-    // Don't touch the main documents list - documents are still there, just group membership changed
-  };
+  }, [selectedGroupId, handleGroupChange]);
 
-  /**
-   * Handle remove document from current group
-   */
-  const handleRemoveFromGroup = async (documentId: string) => {
+  const handleRemoveFromGroup = useCallback(async (documentId: string) => {
     if (!selectedGroupId) return;
 
-    try {
-      const { removeDocumentFromGroup } = await import('./lib/api/groups');
-      await removeDocumentFromGroup(selectedGroupId, documentId);
-      // Refresh group documents to reflect the removal
-      handleGroupChange();
-    } catch (error) {
-      console.error('Failed to remove document from group:', error);
-      throw error; // Let DocumentItem handle the error display
-    }
-  };
+    const { removeDocumentFromGroup } = await import('./lib/api/groups');
+    await removeDocumentFromGroup(selectedGroupId, documentId);
+    handleGroupChange();
+  }, [selectedGroupId, handleGroupChange]);
+
+  const handleSuggestionAccepted = useCallback(() => {
+    setSidebarRefreshTrigger((prev) => prev + 1);
+    handleGroupChange();
+  }, [handleGroupChange]);
+
+  const handleSearchChange = useCallback((params: SearchParams) => {
+    setSearchParams(params);
+  }, []);
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-slate-50 flex">
-        {/* Sidebar */}
+      <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
         <GroupSidebar
           selectedGroupId={selectedGroupId}
           onSelectGroup={handleGroupSelect}
@@ -230,18 +239,21 @@ function App() {
           refreshTrigger={sidebarRefreshTrigger}
         />
 
-        {/* Main content */}
-        <div className="flex-1 flex flex-col">
-          <header className="bg-white border-b border-slate-200 py-6 px-6">
-            <h1 className="text-2xl font-bold text-slate-900 mb-1">AI Document Vault</h1>
-            <p className="text-sm text-slate-500">
-              Upload documents for AI processing and analysis
-            </p>
+        <div className="flex flex-col min-h-screen transition-all duration-300 sidebar-content">
+          <header className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-xl border-b border-neutral-200/60 dark:border-neutral-700/60 py-8 px-8 shadow-sm">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <h1 className="text-3xl font-semibold text-neutral-900 dark:text-neutral-50 mb-2 tracking-tight">AI Document Vault</h1>
+                <p className="text-sm text-neutral-600 dark:text-neutral-400 font-light">
+                  Upload documents for AI processing and analysis
+                </p>
+              </div>
+              <ThemeToggle />
+            </div>
           </header>
 
-          <main className="flex-1 overflow-auto">
-            <div className="max-w-6xl mx-auto py-6 px-6 flex flex-col gap-8">
-            {/* Upload section */}
+          <main className="flex-1 overflow-auto bg-neutral-50 dark:bg-neutral-950">
+            <div className="max-w-6xl mx-auto py-10 px-8 flex flex-col gap-10">
             <section>
               <DocumentUpload
                 onUploadSuccess={handleUploadSuccess}
@@ -249,23 +261,17 @@ function App() {
               />
             </section>
 
-            {/* AI Suggestions */}
             {!selectedGroupId && (
               <section>
                 <AIGroupSuggestions
-                  onSuggestionAccepted={() => {
-                    // Trigger sidebar refresh to show new group
-                    setSidebarRefreshTrigger((prev) => prev + 1);
-                    handleGroupChange();
-                  }}
+                  onSuggestionAccepted={handleSuggestionAccepted}
                 />
               </section>
             )}
 
-            {/* Search and Filter */}
             <section>
               <SearchAndFilter
-                onSearchChange={setSearchParams}
+                onSearchChange={handleSearchChange}
                 currentGroupId={selectedGroupId}
               />
               {searchError && (
@@ -275,15 +281,13 @@ function App() {
                   onDismiss={() => setSearchError(null)}
                   onRetry={() => {
                     setSearchError(null);
-                    // Trigger search again by updating params
-                    setSearchParams({ ...searchParams });
+                    setSearchParams((prev) => ({ ...prev }));
                   }}
                   className="mt-4"
                 />
               )}
             </section>
 
-            {/* Documents section */}
             <section>
               {loadError && !isLoading && (
                 <ErrorDisplay
@@ -291,11 +295,20 @@ function App() {
                   title="Failed to Load Documents"
                   onRetry={() => {
                     setLoadError(null);
-                    // Reload documents
                     const loadDocs = async () => {
                       try {
                         setIsLoadingDocuments(true);
+                        setMinLoadingTime(true);
+                        const startTime = Date.now();
+                        
                         const docs = await getDocuments(false) as Document[];
+                        
+                        const elapsed = Date.now() - startTime;
+                        const minDelay = 300;
+                        if (elapsed < minDelay) {
+                          await new Promise(resolve => setTimeout(resolve, minDelay - elapsed));
+                        }
+                        
                         setDocuments(docs);
                       } catch (error) {
                         const errorMessage = error instanceof ApiClientError
@@ -304,6 +317,7 @@ function App() {
                         setLoadError(errorMessage);
                       } finally {
                         setIsLoadingDocuments(false);
+                        setTimeout(() => setMinLoadingTime(false), 100);
                       }
                     };
                     loadDocs();
@@ -312,11 +326,15 @@ function App() {
                 />
               )}
               {isLoading ? (
-                <div className="text-center py-12">
-                  <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4" />
-                  <p className="text-slate-600">
-                    {isSearching ? 'Searching documents...' : 'Loading documents...'}
-                  </p>
+                <div className="w-full max-w-4xl mx-auto">
+                  <div className="h-8 w-32 bg-neutral-200 dark:bg-neutral-800 rounded-lg mb-8 relative overflow-hidden">
+                    <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/20 dark:via-white/10 to-transparent" />
+                  </div>
+                  <div className="flex flex-col gap-4">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <DocumentItemSkeleton key={i} />
+                    ))}
+                  </div>
                 </div>
               ) : (
                 <DocumentList 

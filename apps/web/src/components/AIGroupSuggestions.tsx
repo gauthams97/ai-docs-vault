@@ -33,13 +33,6 @@ export function AIGroupSuggestions({ onSuggestionAccepted }: AIGroupSuggestionsP
       const newSuggestions = await suggestGroups();
       setSuggestions(newSuggestions);
     } catch (err) {
-      // Explicit error logging - no silent failures
-      console.error('[AIGroupSuggestions] Failed to generate suggestions:', {
-        error: err instanceof Error ? err.message : String(err),
-        stack: err instanceof Error ? err.stack : undefined,
-        timestamp: new Date().toISOString(),
-      });
-      
       const apiError =
         err instanceof ApiClientError
           ? err
@@ -62,17 +55,14 @@ export function AIGroupSuggestions({ onSuggestionAccepted }: AIGroupSuggestionsP
         type: GroupType.AI_SUGGESTED,
       });
 
-      // Add documents to the group
       for (const documentId of suggestion.document_ids) {
         try {
           await addDocumentToGroup(group.id, documentId);
         } catch (err) {
-          console.error(`Failed to add document ${documentId} to group:`, err);
           // Continue with other documents
         }
       }
 
-      // Remove accepted suggestion
       setSuggestions((prev) => prev.filter((s) => s !== suggestion));
       onSuggestionAccepted?.();
     } catch (err) {
@@ -81,7 +71,6 @@ export function AIGroupSuggestions({ onSuggestionAccepted }: AIGroupSuggestionsP
           ? err
           : new ApiClientError('ACCEPT_ERROR', 'Failed to accept suggestion', 'UNKNOWN_ERROR');
       alert(apiError.message);
-      console.error('Failed to accept suggestion:', err);
     } finally {
       setProcessing((prev) => {
         const next = new Set(prev);
@@ -98,17 +87,17 @@ export function AIGroupSuggestions({ onSuggestionAccepted }: AIGroupSuggestionsP
 
   if (suggestions.length === 0 && !loading && !error) {
     return (
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <div className="text-blue-600 text-xl">💡</div>
+      <div className="bg-neutral-50/80 dark:bg-neutral-900/50 border border-neutral-200/60 dark:border-neutral-700/60 rounded-2xl p-6 shadow-sm">
+        <div className="flex items-start gap-4">
+          <div className="text-neutral-600 dark:text-neutral-400 text-2xl">💡</div>
           <div className="flex-1">
-            <h3 className="text-sm font-semibold text-blue-900 mb-1">AI Group Suggestions</h3>
-            <p className="text-sm text-blue-700 mb-3">
+            <h3 className="text-base font-semibold text-neutral-900 dark:text-neutral-50 mb-2 tracking-tight">AI Group Suggestions</h3>
+            <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-4 font-light leading-relaxed">
               Get AI-powered suggestions for grouping your documents based on content similarity.
             </p>
             <button
               onClick={handleGenerateSuggestions}
-              className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
+              className="px-5 py-2.5 text-sm font-medium text-white dark:text-neutral-900 bg-neutral-900 dark:bg-neutral-100 rounded-xl hover:bg-neutral-800 dark:hover:bg-neutral-200 transition-all duration-200 shadow-sm hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 dark:focus-visible:ring-neutral-500"
             >
               Generate Suggestions
             </button>
@@ -119,33 +108,33 @@ export function AIGroupSuggestions({ onSuggestionAccepted }: AIGroupSuggestionsP
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-slate-900">AI Group Suggestions</h3>
+    <div className="bg-white dark:bg-neutral-900 border border-neutral-200/60 dark:border-neutral-700/60 rounded-2xl p-6 shadow-sm">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tracking-tight">AI Group Suggestions</h3>
         <button
           onClick={handleGenerateSuggestions}
           disabled={loading}
-          className="px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100 transition-colors disabled:opacity-50"
+          className="px-4 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-800 rounded-xl hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-all duration-200 disabled:opacity-50 shadow-sm hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 dark:focus-visible:ring-neutral-500"
         >
           {loading ? 'Generating...' : 'Refresh'}
         </button>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">
+        <div className="mb-5 p-4 bg-red-50/80 dark:bg-red-950/30 border border-red-200/60 dark:border-red-800/60 rounded-xl text-red-800 dark:text-red-300 text-sm font-light">
           {error}
         </div>
       )}
 
       {loading && suggestions.length === 0 && (
-        <div className="text-center py-8 text-slate-500">
-          <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-2" />
-          <p>Analyzing documents...</p>
+        <div className="text-center py-12 text-neutral-500 dark:text-neutral-400">
+          <div className="w-6 h-6 border-2 border-neutral-300 dark:border-neutral-700 border-t-neutral-900 dark:border-t-neutral-100 rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm font-light">Analyzing documents...</p>
         </div>
       )}
 
       {suggestions.length > 0 && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {suggestions.map((suggestion, index) => (
             <SuggestionCard
               key={index}
@@ -159,7 +148,7 @@ export function AIGroupSuggestions({ onSuggestionAccepted }: AIGroupSuggestionsP
       )}
 
       {!loading && suggestions.length === 0 && !error && (
-        <p className="text-sm text-slate-500 text-center py-4">
+        <p className="text-sm text-neutral-500 dark:text-neutral-400 text-center py-8 font-light">
           No suggestions available. Make sure you have at least 2 documents with summaries.
         </p>
       )}
@@ -184,20 +173,20 @@ function SuggestionCard({
   const confidencePercent = Math.round(suggestion.confidence * 100);
 
   return (
-    <div className="border border-slate-200 rounded-lg p-4">
-      <div className="flex items-start justify-between mb-2">
+    <div className="border border-neutral-200/60 dark:border-neutral-700/60 rounded-2xl p-5 bg-white dark:bg-neutral-800 shadow-sm">
+      <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
-          <h4 className="font-medium text-slate-900 mb-1">{suggestion.group.name}</h4>
-          <p className="text-sm text-slate-600 mb-2">{suggestion.group.description}</p>
-          <p className="text-xs text-slate-500 mb-2">{suggestion.reason}</p>
-          <div className="flex items-center gap-4 text-xs text-slate-500">
+          <h4 className="font-semibold text-neutral-900 dark:text-neutral-50 mb-2 tracking-tight">{suggestion.group.name}</h4>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2 font-light leading-relaxed">{suggestion.group.description}</p>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-3 font-light">{suggestion.reason}</p>
+          <div className="flex items-center gap-4 text-xs text-neutral-500 dark:text-neutral-400 font-light">
             <span>{suggestion.document_ids.length} documents</span>
-            <span className="flex items-center gap-1">
+            <span className="flex items-center gap-1.5">
               <span>Confidence:</span>
-              <span className={`font-medium ${
-                confidencePercent >= 80 ? 'text-green-600' :
-                confidencePercent >= 60 ? 'text-yellow-600' :
-                'text-orange-600'
+              <span className={`font-semibold ${
+                confidencePercent >= 80 ? 'text-emerald-600 dark:text-emerald-400' :
+                confidencePercent >= 60 ? 'text-amber-600 dark:text-amber-400' :
+                'text-orange-600 dark:text-orange-400'
               }`}>
                 {confidencePercent}%
               </span>
@@ -206,18 +195,18 @@ function SuggestionCard({
         </div>
       </div>
 
-      <div className="flex gap-2 mt-3">
+      <div className="flex gap-3 mt-4">
         <button
           onClick={onAccept}
           disabled={isProcessing}
-          className="flex-1 px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
         >
           {isProcessing ? 'Creating...' : 'Accept'}
         </button>
         <button
           onClick={onReject}
           disabled={isProcessing}
-          className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-slate-100 rounded hover:bg-slate-200 transition-colors disabled:opacity-50"
+          className="px-4 py-2.5 text-sm font-medium text-neutral-700 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-700 rounded-xl hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-all duration-200 disabled:opacity-50 shadow-sm hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 dark:focus-visible:ring-neutral-500"
         >
           Reject
         </button>

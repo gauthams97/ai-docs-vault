@@ -1,3 +1,28 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+html.dark {
+  color-scheme: dark;
+}
+
+.sidebar-content {
+  transition: margin-left 300ms ease-in-out;
+}
+
+body[data-sidebar-open="true"] .sidebar-content {
+  margin-left: 18rem;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}

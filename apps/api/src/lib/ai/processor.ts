@@ -73,7 +73,7 @@ async function downloadFileContent(storagePath: string): Promise<Buffer> {
  * Supports PDF and plain text files.
  * Other formats will be handled as text.
  */
-async function extractTextContent(
+export async function extractTextContent(
   fileBuffer: Buffer,
   filename: string
 ): Promise<string> {
@@ -118,6 +118,8 @@ async function updateDocumentStatus(
     summary?: string | null;
     markdown?: string | null;
     ai_model?: string | null;
+    summary_source?: 'ai_generated' | 'user_modified';
+    markdown_source?: 'ai_generated' | 'user_modified';
   }
 ): Promise<void> {
   // Defensive validation
@@ -259,6 +261,8 @@ export async function processDocument(documentId: string): Promise<Document | nu
         summary: aiResult.summary,
         markdown: aiResult.markdown,
         ai_model: aiResult.model,
+        summary_source: 'ai_generated',
+        markdown_source: 'ai_generated',
       });
       console.log(`[AI Processing ${requestId}] Database update completed successfully`);
     } catch (updateError) {
