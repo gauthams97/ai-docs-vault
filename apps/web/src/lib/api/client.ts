@@ -125,7 +125,15 @@ async function apiRequest<T>(
  * @param file - File to upload
  * @returns Created document with status UPLOADED
  */
-export async function uploadDocument(file: File): Promise<Document> {
+export interface UploadResult {
+  document: Document;
+  costEstimate?: {
+    processingMessage: string;
+    estimatedPages: number;
+  };
+}
+
+export async function uploadDocument(file: File): Promise<UploadResult> {
   const baseUrl = getApiUrl();
   const url = `${baseUrl}/api/documents/upload`;
 
@@ -147,8 +155,11 @@ export async function uploadDocument(file: File): Promise<Document> {
       throw ApiClientError.fromResponse(apiError, response.status);
     }
 
-    const apiResponse = data as ApiResponse<Document>;
-    return apiResponse.data;
+    const apiResponse = data as ApiResponse<Document> & { costEstimate?: { processingMessage: string; estimatedPages: number } };
+    return {
+      document: apiResponse.data,
+      costEstimate: apiResponse.costEstimate,
+    };
   } catch (error) {
     if (error instanceof ApiClientError) {
       throw error;

@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { uploadFile, initializeStorage } from '@/lib/storage';
 import { DocumentStatus } from '@ai-document-vault/shared';
 import type { Document, ApiResponse, ApiError } from '@ai-document-vault/shared';
+import { estimateProcessingCost } from '@/lib/ai/cost-estimation';
 
 export async function POST(request: Request): Promise<Response> {
   const requestId = `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -159,6 +160,19 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
+    // Estimate processing cost and complexity
+    const costEstimate = estimateProcessingCost(file.size, file.name);
+    
+    // Log cost awareness (non-blocking, informational only)
+    if (costEstimate.isLargeDocument) {
+      console.log(`[Upload ${requestId}] Large document detected:`, {
+        fileName: file.name,
+        fileSize: file.size,
+        estimatedPages: costEstimate.estimatedPages,
+        complexity: costEstimate.complexity,
+      });
+    }
+
     processDocumentAsync(document.id).catch((error) => {
       console.error(`[Upload ${requestId}] Background AI processing failed:`, {
         error: error instanceof Error ? error.message : String(error),
@@ -170,7 +184,12 @@ export async function POST(request: Request): Promise<Response> {
       {
         data: document as Document,
         message: 'Document uploaded successfully',
-      } as ApiResponse<Document>,
+        // Include cost awareness metadata (non-blocking, informational)
+        costEstimate: costEstimate.isLargeDocument ? {
+          processingMessage: costEstimate.processingMessage,
+          estimatedPages: costEstimate.estimatedPages,
+        } : undefined,
+      } as ApiResponse<Document> & { costEstimate?: { processingMessage: string; estimatedPages: number } },
       {
         status: 201,
         headers: {

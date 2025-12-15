@@ -186,6 +186,7 @@ export async function processDocument(documentId: string): Promise<Document | nu
 
   try {
     // Get document from database
+    const { estimateProcessingCost } = await import('@/lib/ai/cost-estimation');
     console.log(`[AI Processing ${requestId}] Fetching document from database...`);
     const { data: document, error: fetchError } = await supabaseAdmin
       .from('documents')
@@ -220,6 +221,18 @@ export async function processDocument(documentId: string): Promise<Document | nu
     try {
       fileBuffer = await downloadFileContent(document.storage_path);
       console.log(`[AI Processing ${requestId}] File downloaded successfully (${fileBuffer.length} bytes)`);
+      
+      // Cost awareness: Log estimated processing complexity (non-blocking, informational)
+      const costEstimate = estimateProcessingCost(fileBuffer.length, document.name);
+      if (costEstimate.isLargeDocument) {
+        console.log(`[AI Processing ${requestId}] Cost awareness: Large document detected`, {
+          fileName: document.name,
+          fileSize: fileBuffer.length,
+          estimatedPages: costEstimate.estimatedPages,
+          complexity: costEstimate.complexity,
+          message: costEstimate.processingMessage,
+        });
+      }
     } catch (downloadError) {
       console.error(`[AI Processing ${requestId}] File download failed:`, downloadError);
       throw new Error(`Failed to download file: ${downloadError instanceof Error ? downloadError.message : 'Unknown error'}`);

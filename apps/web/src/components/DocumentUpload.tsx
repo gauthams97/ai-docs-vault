@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { DocumentStatus } from '@ai-document-vault/shared';
 import type { Document } from '@ai-document-vault/shared';
-import { uploadDocument } from '@/lib/api/client';
+import { uploadDocument, type UploadResult } from '@/lib/api/client';
 import { ApiClientError } from '@/lib/api/client';
 
 interface DocumentUploadProps {
@@ -32,6 +32,7 @@ export function DocumentUpload({
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [costWarning, setCostWarning] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   /**
@@ -89,16 +90,22 @@ export function DocumentUpload({
       }
 
       setError(null);
+      setCostWarning(null);
       setIsUploading(true);
 
       try {
         // Upload file
-        const document = await uploadDocument(file);
+        const result: UploadResult = await uploadDocument(file);
+
+        // Show cost awareness message if applicable (non-alarming, informative)
+        if (result.costEstimate?.processingMessage) {
+          setCostWarning(result.costEstimate.processingMessage);
+        }
 
         // Create optimistic document with PROCESSING status for UI
         // (Backend returns UPLOADED, but we show PROCESSING to user)
         const optimisticDocument: Document = {
-          ...document,
+          ...result.document,
           status: DocumentStatus.PROCESSING, // Show as processing in UI
         };
 
@@ -247,6 +254,26 @@ export function DocumentUpload({
           )}
         </div>
       </div>
+
+      {/* Cost awareness message (calm, informative, non-alarming) */}
+      {costWarning && (
+        <div 
+          className="mt-5 p-4 bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-800/60 rounded-xl flex items-start gap-3 text-blue-900 dark:text-blue-200 shadow-sm" 
+          role="status"
+        >
+          <svg className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-sm flex-1 leading-relaxed">{costWarning}</span>
+          <button
+            className="bg-transparent border-none text-blue-700 dark:text-blue-300 text-xl leading-none cursor-pointer p-1 w-6 h-6 flex items-center justify-center rounded-md hover:bg-blue-100/50 dark:hover:bg-blue-900/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900 transition-colors"
+            onClick={() => setCostWarning(null)}
+            aria-label="Dismiss message"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Error display with Apple-style design */}
       {error && (
