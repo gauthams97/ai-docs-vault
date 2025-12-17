@@ -32,16 +32,16 @@ export function GroupMembership({
   const [isLoading, setIsLoading] = useState(false);
 
   // Load all groups
-  useEffect(() => {
-    async function loadGroups() {
-      try {
-        const all = await getGroups();
-        setAllGroups(all);
-      } catch (error) {
-        console.error('Failed to load groups:', error);
-      }
+  const loadGroups = async () => {
+    try {
+      const all = await getGroups();
+      setAllGroups(all);
+    } catch (error) {
+      console.error('Failed to load groups:', error);
     }
+  };
 
+  useEffect(() => {
     loadGroups();
   }, []);
 
@@ -106,10 +106,6 @@ export function GroupMembership({
     }
   };
 
-  if (displayGroups.length === 0 && availableGroups.length === 0) {
-    return null; // No groups to show
-  }
-
   return (
     <div className="flex flex-wrap items-center gap-2">
       {/* Current groups */}
@@ -125,7 +121,7 @@ export function GroupMembership({
           {group.name}
           <button
             onClick={(e) => {
-              e.stopPropagation(); // Prevent any parent click handlers
+              e.stopPropagation();
               handleRemoveFromGroup(group.id);
             }}
             disabled={isLoading}
@@ -140,41 +136,50 @@ export function GroupMembership({
         </span>
       ))}
 
-      {/* Add to group button */}
-      {availableGroups.length > 0 && (
-        <div className="relative">
-          <button
-            onClick={() => setShowAddMenu(!showAddMenu)}
-            disabled={isLoading}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors disabled:opacity-50"
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add to Group
-          </button>
+      {/* Add to group button - always show */}
+      <div className="relative">
+        <button
+          onClick={async () => {
+            if (!showAddMenu) {
+              await loadGroups();
+            }
+            setShowAddMenu(!showAddMenu);
+          }}
+          disabled={isLoading}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors disabled:opacity-50"
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Add to Group
+        </button>
 
-          {showAddMenu && (
-            <>
-              <div
-                className="fixed inset-0 z-10"
-                onClick={() => setShowAddMenu(false)}
-              />
-              <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-20 min-w-[200px] max-h-48 overflow-y-auto">
-                {availableGroups.map((group) => (
+        {showAddMenu && (
+          <>
+            <div
+              className="fixed inset-0 z-10"
+              onClick={() => setShowAddMenu(false)}
+            />
+            <div className="absolute top-full left-0 mt-1 bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-lg shadow-lg z-20 min-w-[200px] max-h-48 overflow-y-auto">
+              {availableGroups.length > 0 ? (
+                availableGroups.map((group) => (
                   <button
                     key={group.id}
                     onClick={() => handleAddToGroup(group.id)}
-                    className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 transition-colors"
+                    className="w-full text-left px-3 py-2 text-sm text-slate-700 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-700 transition-colors"
                   >
                     {group.name}
                   </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      )}
+                ))
+              ) : (
+                <div className="px-3 py-2 text-sm text-slate-500 dark:text-neutral-400">
+                  {allGroups.length === 0 ? 'No groups created yet' : 'Already in all groups'}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
