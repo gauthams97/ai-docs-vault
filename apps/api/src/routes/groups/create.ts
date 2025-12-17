@@ -9,12 +9,17 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { GroupType } from '@ai-document-vault/shared';
 import type { Group, ApiResponse, ApiError, GroupInput } from '@ai-document-vault/shared';
+import { getUserIdFromRequest, requireAuth } from '@/lib/auth';
 
 /**
  * Create a new group
  */
 export async function POST(request: Request): Promise<Response> {
   try {
+    // Get authenticated user ID
+    const userId = await getUserIdFromRequest(request);
+    requireAuth(userId);
+
     const body = await request.json() as GroupInput;
 
     // Validate input
@@ -33,6 +38,7 @@ export async function POST(request: Request): Promise<Response> {
     const { data: group, error } = await supabaseAdmin
       .from('groups')
       .insert({
+        user_id: userId,
         name: body.name.trim(),
         type: body.type || GroupType.MANUAL,
       })

@@ -7,6 +7,7 @@ import { CreateGroupModal } from './CreateGroupModal';
 import { ConfirmModal } from './ConfirmModal';
 import { ErrorDisplay } from './ErrorDisplay';
 import { GroupItemSkeleton } from './Skeleton';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface GroupSidebarProps {
   selectedGroupId: string | null;
@@ -23,6 +24,7 @@ export function GroupSidebar({
   onGroupChange,
   refreshTrigger,
 }: GroupSidebarProps) {
+  const { user } = useAuth();
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -54,8 +56,14 @@ export function GroupSidebar({
   };
 
   useEffect(() => {
+    if (!user) {
+      setGroups([]);
+      setLoading(false);
+      return;
+    }
+    
     loadGroups();
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     if (refreshTrigger !== undefined && refreshTrigger > 0) {

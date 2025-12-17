@@ -14,12 +14,17 @@ import { extractTextContent } from '@/lib/ai/processor';
 import { generateSignedUrl } from '@/lib/storage';
 import { DocumentStatus } from '@ai-document-vault/shared';
 import type { Document, ApiResponse, ApiError } from '@ai-document-vault/shared';
+import { getUserIdFromRequest, requireAuth } from '@/lib/auth';
 
 export async function POST(
   request: Request,
   { params }: { params: { id: string } }
 ): Promise<Response> {
   try {
+    // Get authenticated user ID
+    const userId = await getUserIdFromRequest(request);
+    requireAuth(userId);
+
     const documentId = params.id;
 
     if (!documentId) {
@@ -130,6 +135,7 @@ export async function POST(
       .from('documents')
       .update(updates)
       .eq('id', documentId)
+      .eq('user_id', userId)
       .select()
       .single();
 
@@ -141,7 +147,7 @@ export async function POST(
         return Response.json(
           {
             error: 'DATABASE_ERROR',
-            message: 'Database migration required: The summary_source and markdown_source columns are missing. Please run the SQL migration in Supabase SQL Editor. See RUN_THIS_IN_SUPABASE.sql file.',
+            message: 'Database migration required: The summary_source and markdown_source columns are missing. Please run the SQL migration in Supabase SQL Editor.',
             code: 'MIGRATION_REQUIRED',
           } as ApiError,
           { 

@@ -147,14 +147,12 @@ export function DocumentView({ documentId, onClose, onUpdate }: DocumentViewProp
             <SummaryView
               document={document}
               onUpdate={handleUpdate}
-              onReload={loadDocument}
             />
           )}
           {activeTab === 'markdown' && (
             <MarkdownView
               document={document}
               onUpdate={handleUpdate}
-              onReload={loadDocument}
             />
           )}
         </div>
@@ -278,11 +276,9 @@ function OriginalView({ document }: { document: DocumentWithUrl }) {
 function SummaryView({
   document,
   onUpdate,
-  onReload,
 }: {
   document: DocumentWithUrl;
   onUpdate: (doc: Document) => void;
-  onReload: () => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(document.summary || '');
@@ -567,11 +563,9 @@ function SummaryView({
 function MarkdownView({
   document,
   onUpdate,
-  onReload,
 }: {
   document: DocumentWithUrl;
   onUpdate: (doc: Document) => void;
-  onReload: () => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(document.markdown || '');

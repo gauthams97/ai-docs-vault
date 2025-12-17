@@ -8,15 +8,20 @@
 
 import { supabaseAdmin } from '@/lib/supabase';
 import type { ApiResponse, ApiError } from '@ai-document-vault/shared';
+import { getUserIdFromRequest, requireAuth } from '@/lib/auth';
 
 /**
  * Delete a group
  */
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: { id: string } }
 ): Promise<Response> {
   try {
+    // Get authenticated user ID
+    const userId = await getUserIdFromRequest(request);
+    requireAuth(userId);
+
     const groupId = params.id;
 
     if (!groupId) {
@@ -30,11 +35,12 @@ export async function DELETE(
       );
     }
 
-    // Delete group (cascade will handle document_groups)
+    // Delete user's group (cascade will handle document_groups)
     const { error: deleteError } = await supabaseAdmin
       .from('groups')
       .delete()
-      .eq('id', groupId);
+      .eq('id', groupId)
+      .eq('user_id', userId);
 
     if (deleteError) {
       console.error('Database delete failed:', deleteError);

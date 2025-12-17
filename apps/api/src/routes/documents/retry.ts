@@ -11,6 +11,8 @@
 
 import { retryDocumentProcessing } from '@/lib/ai';
 import type { Document, ApiResponse, ApiError } from '@ai-document-vault/shared';
+import { getUserIdFromRequest, requireAuth } from '@/lib/auth';
+import { supabaseAdmin } from '@/lib/supabase';
 
 /**
  * Retry processing for a document
@@ -18,10 +20,14 @@ import type { Document, ApiResponse, ApiError } from '@ai-document-vault/shared'
  * POST /api/documents/:id/retry
  */
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: { id: string } }
 ): Promise<Response> {
   try {
+    // Get authenticated user ID
+    const userId = await getUserIdFromRequest(request);
+    requireAuth(userId);
+
     const documentId = params.id;
 
     if (!documentId) {

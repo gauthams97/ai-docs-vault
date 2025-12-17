@@ -12,7 +12,7 @@ import type {
   ApiResponse,
   ApiError,
 } from '@ai-document-vault/shared';
-import { ApiClientError } from './client';
+import { ApiClientError, getAuthToken } from './client';
 
 /**
  * Get API base URL
@@ -34,8 +34,14 @@ export async function getGroups(type?: string): Promise<Group[]> {
   const baseUrl = getApiUrl();
   const url = type ? `${baseUrl}/api/groups?type=${type}` : `${baseUrl}/api/groups`;
 
+  const token = await getAuthToken();
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { headers });
     const data = await response.json();
 
     if (!response.ok) {
@@ -66,12 +72,18 @@ export async function createGroup(input: GroupInput): Promise<Group> {
   const baseUrl = getApiUrl();
   const url = `${baseUrl}/api/groups`;
 
+  const token = await getAuthToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   try {
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(input),
     });
 
@@ -105,9 +117,16 @@ export async function deleteGroup(groupId: string): Promise<void> {
   const baseUrl = getApiUrl();
   const url = `${baseUrl}/api/groups/${groupId}`;
 
+  const token = await getAuthToken();
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   try {
     const response = await fetch(url, {
       method: 'DELETE',
+      headers,
     });
 
     const data = await response.json();
@@ -137,12 +156,18 @@ export async function addDocumentToGroup(groupId: string, documentId: string): P
   const baseUrl = getApiUrl();
   const url = `${baseUrl}/api/groups/${groupId}/documents`;
 
+  const token = await getAuthToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   try {
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({ document_id: documentId }),
     });
 
@@ -173,9 +198,16 @@ export async function removeDocumentFromGroup(groupId: string, documentId: strin
   const baseUrl = getApiUrl();
   const url = `${baseUrl}/api/groups/${groupId}/documents/${documentId}`;
 
+  const token = await getAuthToken();
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   try {
     const response = await fetch(url, {
       method: 'DELETE',
+      headers,
     });
 
     const data = await response.json();
@@ -205,8 +237,14 @@ export async function getGroupDocuments(groupId: string): Promise<Document[]> {
   const baseUrl = getApiUrl();
   const url = `${baseUrl}/api/groups/${groupId}/documents`;
 
+  const token = await getAuthToken();
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { headers });
     const data = await response.json();
 
     if (!response.ok) {
@@ -230,19 +268,29 @@ export async function getGroupDocuments(groupId: string): Promise<Document[]> {
   }
 }
 
+
 /**
  * Get AI-suggested groups
+ * 
+ * @returns Object with suggestions array and optional message
  */
-export async function suggestGroups(): Promise<GroupSuggestion[]> {
+export async function suggestGroups(): Promise<{ suggestions: GroupSuggestion[]; message?: string }> {
   const baseUrl = getApiUrl();
   const url = `${baseUrl}/api/groups/suggest`;
+
+  // Get auth token
+  const token = await getAuthToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
 
   try {
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
     });
 
     const data = await response.json();
@@ -253,8 +301,13 @@ export async function suggestGroups(): Promise<GroupSuggestion[]> {
     }
 
     const apiResponse = data as ApiResponse<GroupSuggestion[]>;
-    return apiResponse.data;
+    
+    return {
+      suggestions: apiResponse.data,
+      message: apiResponse.message,
+    };
   } catch (error) {
+    console.error('[GroupSuggest] API error:', error);
     if (error instanceof ApiClientError) {
       throw error;
     }

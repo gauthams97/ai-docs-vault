@@ -9,18 +9,24 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { GroupType } from '@ai-document-vault/shared';
 import type { Group, ApiResponse } from '@ai-document-vault/shared';
+import { getUserIdFromRequest, requireAuth } from '@/lib/auth';
 
 /**
  * Get all groups
  */
 export async function GET(request: Request): Promise<Response> {
   try {
+    // Get authenticated user ID
+    const userId = await getUserIdFromRequest(request);
+    requireAuth(userId);
+
     const url = new URL(request.url);
     const typeFilter = url.searchParams.get('type') as GroupType | null;
 
     let query = supabaseAdmin
       .from('groups')
       .select('*')
+      .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
     // Filter by type if provided

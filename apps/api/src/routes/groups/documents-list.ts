@@ -8,15 +8,20 @@
 
 import { supabaseAdmin } from '@/lib/supabase';
 import type { Document, ApiResponse, ApiError } from '@ai-document-vault/shared';
+import { getUserIdFromRequest, requireAuth } from '@/lib/auth';
 
 /**
  * Get documents in a group
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: { id: string } }
 ): Promise<Response> {
   try {
+    // Get authenticated user ID
+    const userId = await getUserIdFromRequest(request);
+    requireAuth(userId);
+
     const groupId = params.id;
 
     if (!groupId) {
@@ -30,12 +35,31 @@ export async function GET(
       );
     }
 
-    // Get documents in the group via join
+    // Verify group belongs to user
+    const { data: group } = await supabaseAdmin
+      .from('groups')
+      .select('id')
+      .eq('id', groupId)
+      .eq('user_id', userId)
+      .single();
+
+    if (!group) {
+      return Response.json(
+        {
+          error: 'NOT_FOUND',
+          message: 'Group not found or access denied',
+          code: 'GROUP_NOT_FOUND',
+        } as ApiError,
+        { status: 404 }
+      );
+    }
+
+    // Get user's documents in the group via join
     const { data: memberships, error } = await supabaseAdmin
       .from('document_groups')
       .select(`
         document_id,
-        documents (
+        documents!inner (
           id,
           name,
           storage_path,
@@ -47,6 +71,7 @@ export async function GET(
         )
       `)
       .eq('group_id', groupId)
+      .eq('documents.user_id', userId)
       .order('created_at', { ascending: false });
 
     if (error) {

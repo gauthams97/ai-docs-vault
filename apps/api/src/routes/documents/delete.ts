@@ -15,6 +15,7 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { deleteFile } from '@/lib/storage';
 import type { ApiResponse, ApiError } from '@ai-document-vault/shared';
+import { getUserIdFromRequest, requireAuth } from '@/lib/auth';
 
 /**
  * Delete a document
@@ -22,10 +23,14 @@ import type { ApiResponse, ApiError } from '@ai-document-vault/shared';
  * DELETE /api/documents/:id
  */
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: { id: string } }
 ): Promise<Response> {
   try {
+    // Get authenticated user ID
+    const userId = await getUserIdFromRequest(request);
+    requireAuth(userId);
+
     const documentId = params.id;
 
     if (!documentId) {
@@ -39,11 +44,12 @@ export async function DELETE(
       );
     }
 
-    // Get document to get storage path
+    // Get user's document to get storage path
     const { data: document, error: fetchError } = await supabaseAdmin
       .from('documents')
       .select('storage_path')
       .eq('id', documentId)
+      .eq('user_id', userId)
       .single();
 
     if (fetchError || !document) {
@@ -65,11 +71,12 @@ export async function DELETE(
       // Continue with database deletion even if file deletion fails
     }
 
-    // Delete document from database (cascade will handle document_groups)
+    // Delete user's document from database (cascade will handle document_groups)
     const { error: deleteError } = await supabaseAdmin
       .from('documents')
       .delete()
-      .eq('id', documentId);
+      .eq('id', documentId)
+      .eq('user_id', userId);
 
     if (deleteError) {
       console.error('Database delete failed:', deleteError);

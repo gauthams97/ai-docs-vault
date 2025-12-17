@@ -11,6 +11,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { GroupType } from '@ai-document-vault/shared';
 import type { ApiResponse, ApiError } from '@ai-document-vault/shared';
 import Anthropic from '@anthropic-ai/sdk';
+import { getUserIdFromRequest, requireAuth } from '@/lib/auth';
 
 /**
  * AI Group Suggestion
@@ -31,17 +32,21 @@ export interface GroupSuggestion {
  * 
  * Uses semantic similarity analysis of document summaries to suggest groupings.
  */
-export async function POST(_request: Request): Promise<Response> {
+export async function POST(request: Request): Promise<Response> {
   try {
-    // Get all documents with summaries (READY status)
+    // Get authenticated user ID
+    const userId = await getUserIdFromRequest(request);
+    requireAuth(userId);
+
+    // Get user's documents with summaries (READY status)
     const { data: documents, error: fetchError } = await supabaseAdmin
       .from('documents')
       .select('id, name, summary')
+      .eq('user_id', userId)
       .eq('status', 'READY')
       .not('summary', 'is', null);
 
     if (fetchError) {
-      console.error('Error fetching documents:', fetchError);
       return Response.json(
         {
           error: 'DATABASE_ERROR',
@@ -56,9 +61,15 @@ export async function POST(_request: Request): Promise<Response> {
       return Response.json(
         {
           data: [],
-          message: 'Need at least 2 documents with summaries to suggest groups',
+          message: `Need at least 2 documents with summaries to suggest groups. Found ${documents?.length || 0} document(s) with READY status and summaries.`,
         } as ApiResponse<GroupSuggestion[]>,
-        { status: 200 }
+        { 
+          status: 200,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Content-Type': 'application/json',
+          },
+        }
       );
     }
 
@@ -100,7 +111,6 @@ async function generateGroupSuggestions(
   documents: Array<{ id: string; name: string; summary: string | null }>
 ): Promise<GroupSuggestion[]> {
   try {
-    // Prepare document summaries for analysis
     const documentSummaries = documents
       .filter((d) => d.summary)
       .map((d) => `Document ID: ${d.id}\nName: ${d.name}\nSummary: ${d.summary}`)
@@ -133,7 +143,6 @@ Respond with ONLY valid JSON array in this format:
 
 Only suggest groups with confidence >= 0.6. Return an empty array if no good groupings are found.`;
 
-    // Use Claude to analyze directly
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       throw new Error('ANTHROPIC_API_KEY is not set');
@@ -142,7 +151,6 @@ Only suggest groups with confidence >= 0.6. Return an empty array if no good gro
     const client = new Anthropic({ apiKey });
     const model = 'claude-sonnet-4-20250514';
 
-    console.log(`[GroupSuggest] Sending request to Claude API for group suggestions`);
     const message = await client.messages.create({
       model,
       max_tokens: 4096,
@@ -163,36 +171,23 @@ Only suggest groups with confidence >= 0.6. Return an empty array if no good gro
       throw new Error('Empty response from Claude API');
     }
 
-    console.log(`[GroupSuggest] Received response from Claude API`);
-
-    // Parse suggestions from response
     let suggestions: GroupSuggestion[] = [];
     try {
-      // Try to extract JSON from markdown code blocks
       let jsonText = responseText;
       const codeBlockMatch = jsonText.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
       if (codeBlockMatch) {
         jsonText = codeBlockMatch[1];
-        console.log(`[GroupSuggest] Extracted JSON from code block`);
       } else {
-        // Try to find JSON array directly
         const arrayMatch = jsonText.match(/\[[\s\S]*\]/);
         if (arrayMatch) {
           jsonText = arrayMatch[0];
-          console.log(`[GroupSuggest] Found JSON array in response`);
-        } else {
-          console.warn(`[GroupSuggest] No JSON array found in response`);
-          console.warn(`[GroupSuggest] Response preview: ${responseText.substring(0, 200)}`);
         }
       }
 
-      // Parse the JSON
       if (jsonText) {
         suggestions = JSON.parse(jsonText);
-        console.log(`[GroupSuggest] Parsed ${suggestions.length} suggestions from Claude`);
       }
 
-      // Validate and filter suggestions
       suggestions = suggestions
         .filter((s: GroupSuggestion) => {
           return (
@@ -212,19 +207,12 @@ Only suggest groups with confidence >= 0.6. Return an empty array if no good gro
             type: GroupType.AI_SUGGESTED,
           },
         }));
-
-      console.log(`[GroupSuggest] After filtering: ${suggestions.length} valid suggestions`);
     } catch (parseError) {
-      console.error('Failed to parse group suggestions:', parseError);
-      console.error('AI response text:', responseText.substring(0, 500));
-      // Return empty array if parsing fails
       suggestions = [];
     }
 
     return suggestions;
   } catch (error) {
-    console.error('Error generating group suggestions:', error);
-    // Return empty array on error - never break the system
     return [];
   }
 }

@@ -117,7 +117,6 @@ ai-document-vault/
 │       │   └── types/          # Document, Group, API types
 │       └── package.json
 │
-├── schema.sql            # Database schema
 ├── DEPLOYMENT.md         # Deployment guide
 └── package.json          # Root workspace configuration
 ```
@@ -664,7 +663,7 @@ npm run build --workspace=packages/shared
 1. **Create Supabase Project**:
    - Go to [Supabase Dashboard](https://app.supabase.com)
    - Create new project
-   - Apply `schema.sql` in SQL Editor
+   - Set up database tables and schema in SQL Editor
    - Create `documents` storage bucket
 
 2. **Configure Environment Variables**:

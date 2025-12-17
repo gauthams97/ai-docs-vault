@@ -11,6 +11,7 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { generateSignedUrl } from '@/lib/storage';
 import type { Document, ApiResponse, ApiError } from '@ai-document-vault/shared';
+import { getUserIdFromRequest, requireAuth } from '@/lib/auth';
 
 /**
  * Get document with signed URL
@@ -18,10 +19,14 @@ import type { Document, ApiResponse, ApiError } from '@ai-document-vault/shared'
  * GET /api/documents/:id
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: { id: string } }
 ): Promise<Response> {
   try {
+    // Get authenticated user ID
+    const userId = await getUserIdFromRequest(request);
+    requireAuth(userId);
+
     const documentId = params.id;
 
     if (!documentId) {
@@ -35,11 +40,12 @@ export async function GET(
       );
     }
 
-    // Get document from database
+    // Get user's document from database
     const { data: document, error: fetchError } = await supabaseAdmin
       .from('documents')
       .select('*')
       .eq('id', documentId)
+      .eq('user_id', userId)
       .single();
 
     if (fetchError || !document) {

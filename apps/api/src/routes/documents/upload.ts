@@ -3,8 +3,30 @@ import { uploadFile, initializeStorage } from '@/lib/storage';
 import { DocumentStatus } from '@ai-document-vault/shared';
 import type { Document, ApiResponse, ApiError } from '@ai-document-vault/shared';
 import { estimateProcessingCost } from '@/lib/ai/cost-estimation';
+import { getUserIdFromRequest, requireAuth } from '@/lib/auth';
 
 export async function POST(request: Request): Promise<Response> {
+  const userId = await getUserIdFromRequest(request);
+  
+  if (!userId) {
+    return Response.json(
+      {
+        error: 'UNAUTHORIZED',
+        message: 'Authentication required',
+        code: 'AUTH_REQUIRED',
+      } as ApiError,
+      { 
+        status: 401,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+  }
+  
+  requireAuth(userId);
+  
   const requestId = `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   
   try {
@@ -40,7 +62,6 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    // Strict file type validation: PDF, DOC, DOCX only
     const allowedMimeTypes = [
       'application/pdf',
       'application/msword',
@@ -49,14 +70,10 @@ export async function POST(request: Request): Promise<Response> {
     
     const allowedExtensions = ['.pdf', '.doc', '.docx'];
     
-    // Get file extension
     const fileName = file.name.toLowerCase();
     const fileExtension = fileName.substring(fileName.lastIndexOf('.'));
     
-    // Validate MIME type
     const isValidMimeType = file.type && allowedMimeTypes.includes(file.type);
-    
-    // Validate file extension
     const isValidExtension = allowedExtensions.includes(fileExtension);
     
     if (!isValidMimeType || !isValidExtension) {
@@ -110,11 +127,6 @@ export async function POST(request: Request): Promise<Response> {
     });
 
     if (!uploadResult.success) {
-      console.error(`[Upload ${requestId}] Storage upload failed:`, {
-        error: uploadResult.error.error,
-        message: uploadResult.error.message,
-        code: uploadResult.error.code,
-      });
       return Response.json(
         {
           error: uploadResult.error.error,
@@ -124,10 +136,11 @@ export async function POST(request: Request): Promise<Response> {
         { status: 500 }
       );
     }
-
+    
     const { data: document, error: dbError } = await supabaseAdmin
       .from('documents')
       .insert({
+        user_id: userId,
         name: file.name,
         storage_path: uploadResult.data.path,
         status: DocumentStatus.UPLOADED,
@@ -136,17 +149,11 @@ export async function POST(request: Request): Promise<Response> {
       .single();
 
     if (dbError || !document) {
-      console.error(`[Upload ${requestId}] Database insert failed:`, {
-        error: dbError?.message,
-        code: dbError?.code,
-        details: dbError?.details,
-      });
-      
       try {
         const { deleteFile } = await import('@/lib/storage');
         await deleteFile(uploadResult.data.path);
       } catch (cleanupError) {
-        console.error(`[Upload ${requestId}] Failed to cleanup uploaded file:`, cleanupError);
+        // Silent cleanup failure
       }
 
       return Response.json(
@@ -160,31 +167,16 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    // Estimate processing cost and complexity
     const costEstimate = estimateProcessingCost(file.size, file.name);
-    
-    // Log cost awareness (non-blocking, informational only)
-    if (costEstimate.isLargeDocument) {
-      console.log(`[Upload ${requestId}] Large document detected:`, {
-        fileName: file.name,
-        fileSize: file.size,
-        estimatedPages: costEstimate.estimatedPages,
-        complexity: costEstimate.complexity,
-      });
-    }
 
-    processDocumentAsync(document.id).catch((error) => {
-      console.error(`[Upload ${requestId}] Background AI processing failed:`, {
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
+    processDocumentAsync(document.id).catch(() => {
+      // Silent background processing failure
     });
 
     return Response.json(
       {
         data: document as Document,
         message: 'Document uploaded successfully',
-        // Include cost awareness metadata (non-blocking, informational)
         costEstimate: costEstimate.isLargeDocument ? {
           processingMessage: costEstimate.processingMessage,
           estimatedPages: costEstimate.estimatedPages,
@@ -200,13 +192,6 @@ export async function POST(request: Request): Promise<Response> {
     );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    
-    console.error(`[Upload ${requestId}] UNEXPECTED ERROR in upload handler:`, {
-      message: errorMessage,
-      stack: errorStack,
-      timestamp: new Date().toISOString(),
-    });
 
     return Response.json(
       {
@@ -225,10 +210,7 @@ async function processDocumentAsync(documentId: string): Promise<void> {
     const { processDocument } = await import('@/lib/ai');
     await processDocument(documentId);
   } catch (error) {
-    console.error(`[AI Processing] Error:`, error);
-    if (error instanceof Error) {
-      console.error(`[AI Processing] Error stack:`, error.stack);
-    }
+    // Silent background processing failure
   }
 }
 

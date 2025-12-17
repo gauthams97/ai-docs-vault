@@ -22,22 +22,33 @@ export function AIGroupSuggestions({ onSuggestionAccepted }: AIGroupSuggestionsP
   const [suggestions, setSuggestions] = useState<GroupSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [processing, setProcessing] = useState<Set<string>>(new Set());
 
   // Generate suggestions
   const handleGenerateSuggestions = async () => {
     setLoading(true);
     setError(null);
+    setInfo(null);
+    setSuggestions([]);
 
     try {
-      const newSuggestions = await suggestGroups();
-      setSuggestions(newSuggestions);
+      const result = await suggestGroups();
+      setSuggestions(result.suggestions);
+      
+      // Show message from API if provided, otherwise show default message
+      if (result.suggestions.length === 0) {
+        setInfo(result.message || 'No suggestions found. Make sure you have at least 2 documents with completed summaries (status: READY).');
+      } else {
+        setInfo(null);
+      }
     } catch (err) {
+      console.error('Error generating suggestions:', err);
       const apiError =
         err instanceof ApiClientError
           ? err
           : new ApiClientError('SUGGESTION_ERROR', 'Failed to generate suggestions. Please try again.', 'UNKNOWN_ERROR');
-      setError(apiError.message);
+      setError(apiError.message || 'Failed to generate suggestions. Please check that you have at least 2 documents with summaries.');
     } finally {
       setLoading(false);
     }
@@ -126,6 +137,12 @@ export function AIGroupSuggestions({ onSuggestionAccepted }: AIGroupSuggestionsP
         </div>
       )}
 
+      {info && !error && (
+        <div className="mb-5 p-4 bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-800/60 rounded-xl text-blue-800 dark:text-blue-300 text-sm font-light">
+          {info}
+        </div>
+      )}
+
       {loading && suggestions.length === 0 && (
         <div className="text-center py-12 text-neutral-500 dark:text-neutral-400">
           <div className="w-6 h-6 border-2 border-neutral-300 dark:border-neutral-700 border-t-neutral-900 dark:border-t-neutral-100 rounded-full animate-spin mx-auto mb-3" />
@@ -148,9 +165,14 @@ export function AIGroupSuggestions({ onSuggestionAccepted }: AIGroupSuggestionsP
       )}
 
       {!loading && suggestions.length === 0 && !error && (
-        <p className="text-sm text-neutral-500 dark:text-neutral-400 text-center py-8 font-light">
-          No suggestions available. Make sure you have at least 2 documents with summaries.
-        </p>
+        <div className="text-center py-8">
+          <p className="text-sm text-neutral-500 dark:text-neutral-400 font-light mb-2">
+            No suggestions available.
+          </p>
+          <p className="text-xs text-neutral-400 dark:text-neutral-500 font-light">
+            Make sure you have at least 2 documents with completed summaries (status: READY).
+          </p>
+        </div>
       )}
     </div>
   );

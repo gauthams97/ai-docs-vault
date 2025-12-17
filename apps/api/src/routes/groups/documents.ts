@@ -9,6 +9,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase';
 import type { ApiResponse, ApiError } from '@ai-document-vault/shared';
+import { getUserIdFromRequest, requireAuth } from '@/lib/auth';
 
 /**
  * Add document to group
@@ -20,6 +21,10 @@ export async function POST(
   { params }: { params: { id: string } }
 ): Promise<Response> {
   try {
+    // Get authenticated user ID
+    const userId = await getUserIdFromRequest(request);
+    requireAuth(userId);
+
     const groupId = params.id;
     const body = await request.json() as { document_id: string };
 
@@ -31,6 +36,44 @@ export async function POST(
           code: 'MISSING_IDS',
         } as ApiError,
         { status: 400 }
+      );
+    }
+
+    // Verify group belongs to user
+    const { data: group } = await supabaseAdmin
+      .from('groups')
+      .select('id')
+      .eq('id', groupId)
+      .eq('user_id', userId)
+      .single();
+
+    if (!group) {
+      return Response.json(
+        {
+          error: 'NOT_FOUND',
+          message: 'Group not found or access denied',
+          code: 'GROUP_NOT_FOUND',
+        } as ApiError,
+        { status: 404 }
+      );
+    }
+
+    // Verify document belongs to user
+    const { data: document } = await supabaseAdmin
+      .from('documents')
+      .select('id')
+      .eq('id', body.document_id)
+      .eq('user_id', userId)
+      .single();
+
+    if (!document) {
+      return Response.json(
+        {
+          error: 'NOT_FOUND',
+          message: 'Document not found or access denied',
+          code: 'DOCUMENT_NOT_FOUND',
+        } as ApiError,
+        { status: 404 }
       );
     }
 
@@ -108,10 +151,14 @@ export async function POST(
  * DELETE /api/groups/:id/documents/:documentId
  */
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: { id: string; documentId: string } }
 ): Promise<Response> {
   try {
+    // Get authenticated user ID
+    const userId = await getUserIdFromRequest(request);
+    requireAuth(userId);
+
     const groupId = params.id;
     const documentId = params.documentId;
 
@@ -123,6 +170,44 @@ export async function DELETE(
           code: 'MISSING_IDS',
         } as ApiError,
         { status: 400 }
+      );
+    }
+
+    // Verify group belongs to user
+    const { data: group } = await supabaseAdmin
+      .from('groups')
+      .select('id')
+      .eq('id', groupId)
+      .eq('user_id', userId)
+      .single();
+
+    if (!group) {
+      return Response.json(
+        {
+          error: 'NOT_FOUND',
+          message: 'Group not found or access denied',
+          code: 'GROUP_NOT_FOUND',
+        } as ApiError,
+        { status: 404 }
+      );
+    }
+
+    // Verify document belongs to user
+    const { data: document } = await supabaseAdmin
+      .from('documents')
+      .select('id')
+      .eq('id', documentId)
+      .eq('user_id', userId)
+      .single();
+
+    if (!document) {
+      return Response.json(
+        {
+          error: 'NOT_FOUND',
+          message: 'Document not found or access denied',
+          code: 'DOCUMENT_NOT_FOUND',
+        } as ApiError,
+        { status: 404 }
       );
     }
 

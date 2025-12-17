@@ -14,8 +14,12 @@ import { searchDocuments } from './lib/api/search';
 import type { SearchParams } from './lib/api/search';
 import { ThemeToggle } from './components/ThemeToggle';
 import { DocumentItemSkeleton } from './components/Skeleton';
+import { AuthGuard } from './components/AuthGuard';
+import { UserMenu } from './components/UserMenu';
+import { useAuth } from './contexts/AuthContext';
 
 function App() {
+  const { user } = useAuth();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(true);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
@@ -29,10 +33,29 @@ function App() {
   const [minLoadingTime, setMinLoadingTime] = useState(false);
 
   useEffect(() => {
+    if (!user) {
+      setDocuments([]);
+      setGroupDocuments([]);
+      setSelectedGroupId(null);
+      setSearchParams({});
+      setLoadError(null);
+      setSearchError(null);
+      setIsLoadingDocuments(false);
+      setIsLoadingGroupDocuments(false);
+      setIsSearching(false);
+      return;
+    }
+
     async function loadDocuments() {
       try {
-        setIsLoadingDocuments(true);
+        setDocuments([]);
+        setGroupDocuments([]);
+        setSelectedGroupId(null);
+        setSearchParams({});
         setLoadError(null);
+        setSearchError(null);
+        
+        setIsLoadingDocuments(true);
         setMinLoadingTime(true);
         const startTime = Date.now();
         
@@ -57,7 +80,7 @@ function App() {
     }
 
     loadDocuments();
-  }, []);
+  }, [user?.id]); // Reload when user ID changes
 
   useEffect(() => {
     let cancelled = false;
@@ -231,7 +254,8 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
+      <AuthGuard>
+        <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
         <GroupSidebar
           selectedGroupId={selectedGroupId}
           onSelectGroup={handleGroupSelect}
@@ -248,7 +272,10 @@ function App() {
                   Upload documents for AI processing and analysis
                 </p>
               </div>
-              <ThemeToggle />
+              <div className="flex items-center gap-3">
+                <UserMenu />
+                <ThemeToggle />
+              </div>
             </div>
           </header>
 
@@ -351,6 +378,7 @@ function App() {
           </main>
         </div>
       </div>
+      </AuthGuard>
     </ErrorBoundary>
   );
 }

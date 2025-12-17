@@ -1,43 +1,45 @@
-/**
- * List Documents API Route
- * 
- * Fetches all documents from the database.
- * Optionally includes group memberships.
- * 
- * Returns:
- * - List of all documents ordered by created_at DESC
- * - If with_groups=true, includes group memberships
- */
-
 import { supabaseAdmin } from '@/lib/supabase';
 import type { Document, Group, ApiResponse } from '@ai-document-vault/shared';
+import { getUserIdFromRequest, requireAuth } from '@/lib/auth';
 
-/**
- * Document with groups
- */
 export interface DocumentWithGroups {
   document: Document;
   groups: Group[];
 }
 
-/**
- * Get all documents
- * 
- * GET /api/documents?with_groups=true
- */
 export async function GET(request: Request): Promise<Response> {
   try {
+    const userId = await getUserIdFromRequest(request);
+    
+    if (!userId) {
+      return Response.json(
+        {
+          error: 'UNAUTHORIZED',
+          message: 'Authentication required',
+          code: 'AUTH_REQUIRED',
+        },
+        { 
+          status: 401,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+    }
+    
+    requireAuth(userId);
+
     const url = new URL(request.url);
     const withGroups = url.searchParams.get('with_groups') === 'true';
 
-    // Get all documents ordered by most recent first
     const { data: documents, error } = await supabaseAdmin
       .from('documents')
       .select('*')
+      .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching documents:', error);
       return Response.json(
         {
           error: 'DATABASE_ERROR',
@@ -63,16 +65,59 @@ export async function GET(request: Request): Promise<Response> {
       );
     }
 
-    // Get group memberships
+    const documentIds = (documents || []).map((d) => d.id);
+    
+    if (documentIds.length === 0) {
+      const documentsWithGroups: DocumentWithGroups[] = [];
+      return Response.json(
+        {
+          data: documentsWithGroups,
+        } as ApiResponse<DocumentWithGroups[]>,
+        {
+          status: 200,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+    }
+    
+    const { data: userGroups } = await supabaseAdmin
+      .from('groups')
+      .select('id')
+      .eq('user_id', userId);
+    
+    const userGroupIds = (userGroups || []).map((g) => g.id);
+    
+    if (userGroupIds.length === 0) {
+      const documentsWithGroups: DocumentWithGroups[] = (documents || []).map((doc: Document) => ({
+        document: doc,
+        groups: [],
+      }));
+      return Response.json(
+        {
+          data: documentsWithGroups,
+        } as ApiResponse<DocumentWithGroups[]>,
+        {
+          status: 200,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+    }
+    
     const { data: memberships } = await supabaseAdmin
       .from('document_groups')
-      .select('document_id, group_id, groups(id, name, type, created_at)');
+      .select('document_id, group_id, groups(id, name, type, created_at)')
+      .in('document_id', documentIds)
+      .in('group_id', userGroupIds);
 
-    // Build map of document_id -> groups[]
     const groupsMap = new Map<string, Group[]>();
     (memberships || []).forEach((membership: any) => {
       if (membership.groups && membership.document_id) {
-        // Supabase returns a single group object, not an array
         const group = membership.groups;
         if (group && group.id) {
           if (!groupsMap.has(membership.document_id)) {
@@ -83,7 +128,6 @@ export async function GET(request: Request): Promise<Response> {
       }
     });
 
-    // Combine documents with groups
     const documentsWithGroups: DocumentWithGroups[] = (documents || []).map((doc: Document) => ({
       document: doc,
       groups: groupsMap.get(doc.id) || [],
@@ -103,7 +147,6 @@ export async function GET(request: Request): Promise<Response> {
     );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Unexpected error in list documents handler:', error);
 
     return Response.json(
       {

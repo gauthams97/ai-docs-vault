@@ -9,6 +9,7 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { DocumentStatus } from '@ai-document-vault/shared';
 import type { Document, ApiResponse, ApiError } from '@ai-document-vault/shared';
+import { getUserIdFromRequest, requireAuth } from '@/lib/auth';
 
 /**
  * Search and filter documents
@@ -20,12 +21,16 @@ import type { Document, ApiResponse, ApiError } from '@ai-document-vault/shared'
  */
 export async function GET(request: Request): Promise<Response> {
   try {
+    // Get authenticated user ID
+    const userId = await getUserIdFromRequest(request);
+    requireAuth(userId);
+
     const url = new URL(request.url);
     const searchQuery = url.searchParams.get('q')?.trim() || '';
     const statusFilter = url.searchParams.get('status') as DocumentStatus | null;
     const groupIdFilter = url.searchParams.get('group_id') || null;
 
-    let query = supabaseAdmin.from('documents').select('*');
+    let query = supabaseAdmin.from('documents').select('*').eq('user_id', userId);
 
     // Filter by group if specified
     if (groupIdFilter) {

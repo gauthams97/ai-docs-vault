@@ -572,7 +572,8 @@ async function handleListDocuments(req: IncomingMessage, res: ServerResponse) {
     const headers = new Headers();
     Object.entries(req.headers).forEach(([key, value]) => {
       if (value && key !== 'host') {
-        headers.set(key, Array.isArray(value) ? value.join(', ') : value);
+        const headerKey = key.toLowerCase() === 'authorization' ? 'Authorization' : key;
+        headers.set(headerKey, Array.isArray(value) ? value.join(', ') : value);
       }
     });
 
@@ -584,7 +585,6 @@ async function handleListDocuments(req: IncomingMessage, res: ServerResponse) {
     const response = await GET(request);
     await sendResponse(res, response);
   } catch (error) {
-    console.error('List documents handler error:', error);
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({
@@ -600,20 +600,19 @@ async function handleListDocuments(req: IncomingMessage, res: ServerResponse) {
  */
 async function handleUpload(req: IncomingMessage, res: ServerResponse) {
   try {
-    // Import handler dynamically to avoid circular dependencies
     const { POST } = await import('./routes/documents/upload.js');
 
-    // Convert Node.js request to Web API Request
     const body = await getRequestBody(req);
     const headers = new Headers();
     Object.entries(req.headers).forEach(([key, value]) => {
       if (value && key !== 'host') {
-        headers.set(key, Array.isArray(value) ? value.join(', ') : value);
+        const headerKey = key.toLowerCase() === 'authorization' ? 'Authorization' : key;
+        headers.set(headerKey, Array.isArray(value) ? value.join(', ') : value);
       }
     });
 
     const request = new Request(`http://${req.headers.host}${req.url}`, {
-      method: req.method || 'GET',
+      method: req.method || 'POST',
       headers,
       body: body ? body : undefined,
     });
@@ -621,7 +620,6 @@ async function handleUpload(req: IncomingMessage, res: ServerResponse) {
     const response = await POST(request);
     await sendResponse(res, response);
   } catch (error) {
-    console.error('Upload handler error:', error);
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({
@@ -673,10 +671,7 @@ async function sendResponse(
 export function startServer() {
   const server = createServer();
 
-  server.listen(PORT, () => {
-    console.log(`🚀 API server running on http://localhost:${PORT}`);
-    console.log(`📝 Upload endpoint: http://localhost:${PORT}/api/documents/upload`);
-  });
+  server.listen(PORT);
 
   server.on('error', (error: NodeJS.ErrnoException) => {
     if (error.code === 'EADDRINUSE') {

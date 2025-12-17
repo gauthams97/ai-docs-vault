@@ -56,10 +56,26 @@ export class ApiClientError extends Error {
   }
 }
 
+export async function getAuthToken(): Promise<string | null> {
+  try {
+    const { supabase } = await import('@/lib/supabase');
+    const { data: { session }, error } = await supabase.auth.getSession();
+    
+    if (error || !session || !session.access_token) {
+      return null;
+    }
+    
+    return session.access_token;
+  } catch (error) {
+    return null;
+  }
+}
+
 /**
  * Make a typed API request
  * 
  * Handles request/response parsing and error handling.
+ * Automatically includes authentication token if available.
  */
 async function apiRequest<T>(
   endpoint: string,
@@ -68,13 +84,21 @@ async function apiRequest<T>(
   const baseUrl = getApiUrl();
   const url = `${baseUrl}${endpoint}`;
 
+  // Get auth token and add to headers
+  const token = await getAuthToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string>),
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   try {
     const response = await fetch(url, {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+      headers,
     });
 
     const data = await response.json();
@@ -141,9 +165,17 @@ export async function uploadDocument(file: File): Promise<UploadResult> {
   const formData = new FormData();
   formData.append('file', file);
 
+  // Get auth token
+  const token = await getAuthToken();
+  const headers: HeadersInit = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   try {
     const response = await fetch(url, {
       method: 'POST',
+      headers,
       body: formData,
       // Don't set Content-Type header - browser will set it with boundary
     });
@@ -230,12 +262,18 @@ export async function deleteDocument(id: string): Promise<void> {
   const baseUrl = getApiUrl();
   const url = `${baseUrl}/api/documents/${id}`;
 
+  const token = await getAuthToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   try {
     const response = await fetch(url, {
       method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
     });
 
     const data = await response.json();
@@ -278,12 +316,18 @@ export async function retryDocument(id: string): Promise<Document> {
   const baseUrl = getApiUrl();
   const url = `${baseUrl}/api/documents/${id}/retry`;
 
+  const token = await getAuthToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   try {
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
     });
 
     const data = await response.json();
@@ -335,12 +379,18 @@ export async function updateDocumentContent(
   const baseUrl = getApiUrl();
   const url = `${baseUrl}/api/documents/${id}/content`;
 
+  const token = await getAuthToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   try {
     const response = await fetch(url, {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(updates),
     });
 
@@ -393,12 +443,18 @@ export async function regenerateDocumentContent(
   const baseUrl = getApiUrl();
   const url = `${baseUrl}/api/documents/${id}/regenerate`;
 
+  const token = await getAuthToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   try {
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({ type }),
     });
 

@@ -5,7 +5,7 @@
  */
 
 import type { Document, DocumentStatus, ApiResponse, ApiError } from '@ai-document-vault/shared';
-import { ApiClientError } from './client';
+import { ApiClientError, getAuthToken } from './client';
 
 /**
  * Search parameters
@@ -27,9 +27,6 @@ function getApiUrl(): string {
   return url;
 }
 
-/**
- * Search and filter documents
- */
 export async function searchDocuments(params: SearchParams): Promise<Document[]> {
   const baseUrl = getApiUrl();
   const searchParams = new URLSearchParams();
@@ -46,8 +43,14 @@ export async function searchDocuments(params: SearchParams): Promise<Document[]>
 
   const url = `${baseUrl}/api/documents/search?${searchParams.toString()}`;
 
+  const token = await getAuthToken();
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { headers });
     const data = await response.json();
 
     if (!response.ok) {
